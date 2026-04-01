@@ -14,21 +14,30 @@ processed_messages = set()
 
 # 🧠 دالة التلخيص باستخدام OpenRouter
 def summarize(text):
-    try:
-        text = text[:3000]
+    models = [
+        "meta-llama/llama-3-8b-instruct:free",
+        "google/gemma-7b-it:free",
+        "mistralai/mistral-7b-instruct:free"
+    ]
 
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": "mistralai/mistral-7b-instruct:free",
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": f"""
+    text = text[:3000]
+
+    for model in models:
+        try:
+            print(f"🔄 Trying model: {model}")
+
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": model,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": f"""
 لخص النص التالي:
 - في 3 نقاط
 - بأسلوب واضح ومختصر
@@ -36,24 +45,27 @@ def summarize(text):
 النص:
 {text}
 """
-                    }
-                ]
-            }
-        )
+                        }
+                    ]
+                }
+            )
 
-        data = response.json()
+            data = response.json()
+            print("📊 RESPONSE:", data)
 
-        # 🔍 اطبع الرد الكامل للتشخيص
-        print("📊 API RESPONSE:", data)
+            if "choices" in data:
+                print(f"✅ Success with: {model}")
+                return data["choices"][0]["message"]["content"]
 
-        # ✅ تحقق قبل الاستخدام
-        if "choices" in data:
-            return data["choices"][0]["message"]["content"]
-        else:
-            return f"❌ خطأ من API:\n{data}"
+            else:
+                print(f"❌ Failed with {model}: {data}")
+                continue
 
-    except Exception as e:
-        return f"❌ خطأ: {e}"
+        except Exception as e:
+            print(f"❌ Error with {model}: {e}")
+            continue
+
+    return "❌ لم ينجح أي نموذج في التلخيص"
 # 📥 استقبال الرسائل
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
