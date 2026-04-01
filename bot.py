@@ -1,26 +1,37 @@
 import os
 import requests
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters
+)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# 📦 تخزين القنوات لكل مجموعة
+# 📡 تخزين القنوات لكل مجموعة
 group_channels = {}
 
-# 🔒 قناة الاشتراك الإجباري
-REQUIRED_CHANNEL = "Kinnasha"  # بدون @
+# 🔒 قناة الاشتراك الإجباري (بدون @)
+REQUIRED_CHANNEL = "nst3li8"
 
 # ✅ التحقق من الاشتراك
 async def is_subscribed(user_id, context):
     try:
-        member = await context.bot.get_chat_member(f"@{REQUIRED_CHANNEL}", user_id)
+        member = await context.bot.get_chat_member(
+            chat_id=f"@{REQUIRED_CHANNEL}",
+            user_id=user_id
+        )
         return member.status in ["member", "administrator", "creator"]
-    except:
+    except Exception as e:
+        print("SUB ERROR:", e)
         return False
 
-# 🧠 التلخيص
+# 🧠 التلخيص عبر OpenRouter
 def summarize(text):
     models = [
         "qwen/qwen3.6-plus-preview:free",
@@ -28,8 +39,14 @@ def summarize(text):
     ]
 
     prompt = f"""
-لخص النص التالي في نقاط واضحة وقصيرة:
+لخص النص التالي:
 
+- اجعله في نقاط واضحة
+- كل نقطة تبدأ بعنوان بالخط العريض
+- ضع سطر فارغ بين كل نقطة
+- اجعل النص سهل القراءة
+
+النص:
 {text}
 """
 
@@ -53,32 +70,46 @@ def summarize(text):
             if "choices" in data:
                 return data["choices"][0]["message"]["content"]
 
-        except:
+        except Exception as e:
+            print("API ERROR:", e)
             continue
 
     return "❌ فشل التلخيص"
 
-# 🚀 /start
+# 🚀 /start (مع أزرار)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
+    keyboard = [
+        [InlineKeyboardButton("📢 اشترك في القناة", url=f"https://t.me/{REQUIRED_CHANNEL}")],
+        [InlineKeyboardButton("✅ تحقق من الاشتراك", callback_data="check_sub")]
+    ]
 
-    if not await is_subscribed(user_id, context):
-        await update.message.reply_text(
-            f"🚫 يجب الاشتراك أولاً في القناة:\n@{REQUIRED_CHANNEL}\n\nثم أعد إرسال /start"
-        )
-        return
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
-        "👋 أهلاً بك!\n\n"
-        "📌 الخطوات:\n"
-        "1. أضفني إلى مجموعة\n"
-        "2. اجعلني مشرفًا\n"
-        "3. أرسل يوزر القناة هنا مثل:\n"
-        "@example\n\n"
-        "🚀 وسأقوم بالتلخيص تلقائيًا"
+        "👋 مرحبًا!\n\n🔒 يجب الاشتراك أولاً لاستخدام البوت",
+        reply_markup=reply_markup
     )
 
-# 📥 استقبال يوزر القناة
+# 🔘 زر التحقق
+async def check_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+
+    if await is_subscribed(user_id, context):
+        await query.edit_message_text(
+            "✅ تم التحقق من الاشتراك!\n\n"
+            "📌 الخطوات التالية:\n"
+            "1. أضفني إلى مجموعة\n"
+            "2. اجعلني مشرفًا\n"
+            "3. أرسل يوزر القناة داخل المجموعة مثل:\n"
+            "@example"
+        )
+    else:
+        await query.answer("❌ لم تشترك بعد!", show_alert=True)
+
+# 📥 استقبال يوزر القناة داخل المجموعة
 async def set_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.text.startswith("@"):
         return
@@ -96,7 +127,7 @@ async def set_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"✅ تم تفعيل التلخيص لهذه المجموعة\n📡 القناة: @{username}"
     )
 
-# 📥 مراقبة الرسائل
+# 📡 مراقبة الرسائل القادمة من القناة
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
 
@@ -121,20 +152,25 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     summary = summarize(message.text)
 
-    # ✨ التنسيق المطلوب
     reply = f"""
 <b>قَالَ المُحَشِّي الفَاضِل:</b>
 
 {summary}
+
+━━━━━━━━━━━
+
+🚀 جرّب البوت الآن في مجموعتك
 """
 
     await message.reply_text(reply, parse_mode="HTML")
 
-# 🚀 تشغيل
+# 🚀 تشغيل البوت
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(check_subscription, pattern="check_sub"))
+
     app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, set_channel))
     app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, handle_messages))
 
