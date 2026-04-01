@@ -1,100 +1,150 @@
 import os
 import requests
-from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
+from telegram import Update, ChatMember
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters
+)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# 📡 كل مجموعة لها قناة (بالـ ID)
-group_channels = {}
+REQUIRED_CHANNEL = "nst3li8"
 
+# تخزين العلاقات (مؤقت - الأفضل لاحقًا قاعدة بيانات)
+user_channels = {}   # user_id -> channel_username
 processed_messages = set()
 
 # 🧠 التلخيص
 def summarize(text):
-    model = "qwen/qwen3.6-plus-preview:free"
+    models = [
+        "qwen/qwen3.6-plus-preview:free",
+        "bytedance/seedance-1-5-pro"
+    ]
 
-    try:
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": model,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": f"لخص النص التالي في نقاط واضحة:\n{text}"
-                    }
-                ]
-            }
-        )
+    text = text[:3000]
 
-        data = response.json()
+    for model in models:
+        try:
+            print(f"🔄 Trying model: {model}")
 
-        if "choices" in data:
-            return data["choices"][0]["message"]["content"]
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": model,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": f"""
+لخص النص التالي:
+- في نقاط
+- مختصر وواضح
 
-    except Exception as e:
-        print("ERROR:", e)
+{text}
+"""
+                        }
+                    ]
+                }
+            )
+
+            data = response.json()
+            print("📊 RESPONSE:", data)
+
+            if "choices" in data:
+                return data["choices"][0]["message"]["content"]
+
+        except Exception as e:
+            print("❌ Summarize error:", e)
 
     return "❌ فشل التلخيص"
 
+# ✅ التحقق من الاشتراك
+async def is_subscribed(user_id, context):
+    try:
+        member = await context.bot.get_chat_member(
+            chat_id=f"@{REQUIRED_CHANNEL}",
+            user_id=user_id
+        )
 
-# 📌 تسجيل القناة (من أول رسالة)
+        return member.status in ["member", "administrator", "creator"]
+
+    except Exception as e:
+        print("❌ Subscription check error:", e)
+        return False
+
+# 🚀 بدء الاستخدام
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    print(f"👤 New user: {user_id}")
+
+    if not await is_subscribed(user_id, context):
+        await update.message.reply_text(
+            f"❌ يجب الاشتراك في القناة أولاً:\nhttps://t.me/{REQUIRED_CHANNEL}"
+        )
+        return
+
+    await update.message.reply_text(
+        "✅ تم التحقق من الاشتراك\n\n"
+        "📌 الآن:\n"
+        "1- أضف البوت كمشرف في مجموعة القناة\n"
+        "2- أرسل يوزر القناة (مثال: @channel)"
+    )
+
+# 📌 تسجيل القناة
 async def register_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    text = update.message.text.strip()
+
+    if not text.startswith("@"):
+        return
+
+    if user_id in user_channels:
+        print("⚠️ User already registered")
+        return
+
+    channel_username = text.replace("@", "")
+
+    try:
+        chat = await context.bot.get_chat(f"@{channel_username}")
+        print(f"📡 Found channel: {channel_username}")
+
+        # تحقق أن البوت أدمن
+        bot_member = await context.bot.get_chat_member(chat.id, context.bot.id)
+
+        if bot_member.status not in ["administrator", "creator"]:
+            await update.message.reply_text("❌ يجب جعل البوت مشرف أولاً")
+            return
+
+        user_channels[user_id] = channel_username
+
+        await update.message.reply_text("✅ تم ربط القناة بنجاح")
+
+    except Exception as e:
+        print("❌ Channel error:", e)
+        await update.message.reply_text("❌ لم أستطع الوصول للقناة")
+
+# 📥 استقبال الرسائل من المجموعات
+async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
 
     if not message or not message.sender_chat:
         return
 
-    group_id = message.chat_id
+    channel_username = message.sender_chat.username
 
-    # إذا لم يتم تسجيل قناة بعد
-    if group_id not in group_channels:
-        group_channels[group_id] = message.sender_chat.id
-
-        print("✅ تم تسجيل القناة:", message.sender_chat.title)
-        print("ID:", message.sender_chat.id)
-
-
-# 📥 التقاط الرسائل
-async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.message
-
-    if not message:
+    # تحقق أن القناة مسجلة عند أي مستخدم
+    if channel_username not in user_channels.values():
         return
 
-    print("📩 NEW MESSAGE")
-
-    group_id = message.chat_id
-
-    if group_id not in group_channels:
-        return
-
-    target_channel_id = group_channels[group_id]
-
-    detected_channel_id = None
-
-    # حالة قناة مباشرة
-    if message.sender_chat:
-        detected_channel_id = message.sender_chat.id
-
-    # حالة forward
-    elif message.forward_from_chat:
-        detected_channel_id = message.forward_from_chat.id
-
-    if not detected_channel_id:
-        return
-
-    print("📡 Detected ID:", detected_channel_id)
-
-    if detected_channel_id != target_channel_id:
-        return
-
+    # منع التكرار
     if message.message_id in processed_messages:
         return
 
@@ -106,27 +156,26 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     processed_messages.add(message.message_id)
 
-    print("📌 تم اكتشاف رسالة صحيحة!")
+    print(f"📌 Message from channel: {channel_username}")
 
     summary = summarize(message.text)
 
-    await message.reply_text(f"قَالَ المُحَشِّي الفَاضِل:\n\n{summary}")
+    try:
+        await message.reply_text(f"📜 التلخيص:\n\n{summary}")
+    except Exception as e:
+        print("❌ Reply error:", e)
 
-
-# 🚀 تشغيل
+# 🚀 تشغيل البوت
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # تسجيل القناة تلقائيًا
-    app.add_handler(MessageHandler(filters.ALL, register_channel))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & filters.PRIVATE, register_channel))
+    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, handle_messages))
 
-    # التقاط الرسائل
-    app.add_handler(MessageHandler(filters.ALL, handle_messages))
-
-    print("✅ Bot is running...")
+    print("✅ Bot running...")
 
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
