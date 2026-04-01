@@ -204,7 +204,7 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, set_channel))
 
     # التقاط الرسائل
-    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, handle_messages))
+    app.add_handler(MessageHandler(filters.ALL, handle_messages))
 
     print("✅ Bot is running...")
 
