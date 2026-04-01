@@ -170,7 +170,7 @@ def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & filters.PRIVATE, register_channel))
+    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, register_channel))
     app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, handle_messages))
 
     print("✅ Bot running...")
