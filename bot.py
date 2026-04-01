@@ -10,7 +10,7 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 group_channels = {}
 
 # 🔒 قناة الاشتراك الإجباري
-REQUIRED_CHANNEL = "yourchannel"  # بدون @
+REQUIRED_CHANNEL = "Kinnasha"  # بدون @
 
 # ✅ التحقق من الاشتراك
 async def is_subscribed(user_id, context):
