@@ -39,11 +39,11 @@ def summarize(text):
                             "role": "user",
                             "content": f"""
 لخص النص التالي:
-- في 3 نقاط
+- في عدد نقاط مناسب
 - بأسلوب واضح ومختصر
 
 النص:
-{text}
+**{text}**
 """
                         }
                     ]
@@ -99,7 +99,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     summary = summarize(message.text)
 
-    await message.reply_text(f"📌 التلخيص:\n\n{summary}")
+    await message.reply_text(f"**قَالَ المُحَشِّي الفَاضِل:**:\n\n{summary}")
 
 # 🚀 تشغيل البوت
 def main():
