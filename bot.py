@@ -13,10 +13,14 @@ from telegram.ext import (
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
+# 📡 تخزين القناة لكل مجموعة
 group_channels = {}
+
+# 🔒 قناة الاشتراك (بدون @)
 REQUIRED_CHANNEL = "nst3li8"
 
-# ✅ تحقق الاشتراك
+
+# ✅ التحقق من الاشتراك
 async def is_subscribed(user_id, context):
     try:
         member = await context.bot.get_chat_member(
@@ -24,8 +28,10 @@ async def is_subscribed(user_id, context):
             user_id=user_id
         )
         return member.status in ["member", "administrator", "creator"]
-    except:
+    except Exception as e:
+        print("SUB ERROR:", e)
         return False
+
 
 # 🧠 التلخيص
 def summarize(text):
@@ -38,10 +44,22 @@ def summarize(text):
             },
             json={
                 "model": "qwen/qwen3.6-plus-preview:free",
-                "messages": [{
-                    "role": "user",
-                    "content": f"لخص هذا النص في نقاط واضحة ومنسقة:\n\n{text}"
-                }]
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": f"""
+لخص النص التالي:
+
+- اجعله في نقاط واضحة
+- عناوين النقاط بالخط العريض
+- ضع مسافة بين كل نقطة
+
+النص:
+{text}
+"""
+                    }
+                ],
+                "temperature": 0.5
             }
         )
 
@@ -53,8 +71,9 @@ def summarize(text):
         return "❌ فشل التلخيص"
 
     except Exception as e:
-        print(e)
+        print("API ERROR:", e)
         return "❌ خطأ في التلخيص"
+
 
 # 🚀 start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -68,21 +87,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# 🔘 تحقق
+
+# 🔘 تحقق الاشتراك
 async def check(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     if await is_subscribed(query.from_user.id, context):
         await query.edit_message_text(
-            "✅ تم التحقق\n\nأضفني لمجموعة وأرسل يوزر القناة"
+            "✅ تم التحقق\n\n"
+            "📌 أضفني إلى مجموعة\n"
+            "📌 اجعلني مشرفًا\n"
+            "📌 أرسل يوزر القناة داخل المجموعة\n\n"
+            "مثال:\n@example"
         )
     else:
-        await query.answer("❌ لم تشترك", show_alert=True)
+        await query.answer("❌ لم تشترك بعد", show_alert=True)
 
-# 📥 تحديد القناة (مرة واحدة فقط)
+
+# 📥 تعيين قناة (مرة واحدة فقط)
 async def set_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
+
+    if not message:
+        return
 
     if message.chat.type == "private":
         return
@@ -92,7 +120,7 @@ async def set_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     group_id = message.chat_id
 
-    # ❗ منع التغيير
+    # ❗ منع تغيير القناة
     if group_id in group_channels:
         await message.reply_text("⚠️ تم تعيين قناة مسبقًا ولا يمكن تغييرها")
         return
@@ -100,11 +128,12 @@ async def set_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = message.text.replace("@", "").lower()
     group_channels[group_id] = username
 
-    await message.reply_text(f"✅ تم التفعيل للقناة @{username}")
+    await message.reply_text(f"✅ تم تفعيل القناة @{username}")
 
-# 📡 التقاط رسائل القناة (مهم جدًا)
-async def handle_channel_posts(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.message
+
+# 🔥 التقاط كل الرسائل (الحل الحقيقي)
+async def handle_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.effective_message
 
     if not message:
         return
@@ -118,11 +147,12 @@ async def handle_channel_posts(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     target = group_channels[group_id]
-
     sender = message.sender_chat.username
 
     if not sender:
         return
+
+    print("📡 رسالة واردة من:", sender)
 
     if sender.lower() != target:
         return
@@ -133,19 +163,20 @@ async def handle_channel_posts(update: Update, context: ContextTypes.DEFAULT_TYP
     if len(message.text.split()) < 50:
         return
 
-    print("📌 تم اكتشاف رسالة من القناة")
+    print("🔥 تم اكتشاف رسالة القناة!")
 
     summary = summarize(message.text)
 
     reply = f"""
-<b>كَمَا قَالَ المُحَشِّي الفَاضِل:</b>
+<b>قَالَ المُحَشِّي الفَاضِل:</b>
 
 {summary}
 """
 
     await message.reply_text(reply, parse_mode="HTML")
 
-# 🚀 تشغيل
+
+# 🚀 تشغيل البوت
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -154,12 +185,13 @@ def main():
 
     app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, set_channel))
 
-    # 🔥 مهم جدًا: ALL وليس TEXT فقط
-    app.add_handler(MessageHandler(filters.ALL & filters.ChatType.GROUPS, handle_channel_posts))
+    # 🔥 مهم جدًا
+    app.add_handler(MessageHandler(filters.ALL, handle_all))
 
-    print("✅ Bot running...")
+    print("✅ Bot is running...")
 
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
