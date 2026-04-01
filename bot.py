@@ -106,26 +106,32 @@ async def register_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text.startswith("@"):
         return
 
-    if user_id in user_channels:
-        print("⚠️ User already registered")
-        return
-
     channel_username = text.replace("@", "")
 
     try:
         chat = await context.bot.get_chat(f"@{channel_username}")
         print(f"📡 Found channel: {channel_username}")
 
-        # تحقق أن البوت أدمن
         bot_member = await context.bot.get_chat_member(chat.id, context.bot.id)
 
         if bot_member.status not in ["administrator", "creator"]:
             await update.message.reply_text("❌ يجب جعل البوت مشرف أولاً")
             return
 
-        user_channels[user_id] = channel_username
+        # إنشاء set لو أول مرة
+        if user_id not in user_channels:
+            user_channels[user_id] = set()
 
-        await update.message.reply_text("✅ تم ربط القناة بنجاح")
+        # منع التكرار لنفس القناة
+        if channel_username in user_channels[user_id]:
+            print("⚠️ Channel already registered")
+            return
+
+        user_channels[user_id].add(channel_username)
+
+        await update.message.reply_text(
+            f"✅ تم ربط القناة: @{channel_username}"
+        )
 
     except Exception as e:
         print("❌ Channel error:", e)
@@ -140,9 +146,14 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     channel_username = message.sender_chat.username
 
-    # تحقق أن القناة مسجلة عند أي مستخدم
-    if channel_username not in user_channels.values():
-        return
+    # تحقق أن القناة موجودة عند أي مستخدم
+found = any(
+    channel_username in channels
+    for channels in user_channels.values()
+)
+
+if not found:
+    return
 
     # منع التكرار
     if message.message_id in processed_messages:
