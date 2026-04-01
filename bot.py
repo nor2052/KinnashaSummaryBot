@@ -1,6 +1,6 @@
 import os
 import requests
-from telegram import Update, ChatMember
+from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -14,8 +14,8 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 REQUIRED_CHANNEL = "nst3li8"
 
-# تخزين العلاقات (مؤقت - الأفضل لاحقًا قاعدة بيانات)
-user_channels = {}   # user_id -> channel_username
+# user_id -> set of channels
+user_channels = {}
 processed_messages = set()
 
 # 🧠 التلخيص
@@ -72,7 +72,6 @@ async def is_subscribed(user_id, context):
             chat_id=f"@{REQUIRED_CHANNEL}",
             user_id=user_id
         )
-
         return member.status in ["member", "administrator", "creator"]
 
     except Exception as e:
@@ -118,11 +117,9 @@ async def register_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ يجب جعل البوت مشرف أولاً")
             return
 
-        # إنشاء set لو أول مرة
         if user_id not in user_channels:
             user_channels[user_id] = set()
 
-        # منع التكرار لنفس القناة
         if channel_username in user_channels[user_id]:
             print("⚠️ Channel already registered")
             return
@@ -137,7 +134,7 @@ async def register_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print("❌ Channel error:", e)
         await update.message.reply_text("❌ لم أستطع الوصول للقناة")
 
-# 📥 استقبال الرسائل من المجموعات
+# 📥 استقبال الرسائل
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
 
@@ -146,14 +143,14 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     channel_username = message.sender_chat.username
 
-    # تحقق أن القناة موجودة عند أي مستخدم
-found = any(
-    channel_username in channels
-    for channels in user_channels.values()
-)
+    # ✅ تحقق أن القناة مسجلة
+    found = any(
+        channel_username in channels
+        for channels in user_channels.values()
+    )
 
-if not found:
-    return
+    if not found:
+        return
 
     # منع التكرار
     if message.message_id in processed_messages:
