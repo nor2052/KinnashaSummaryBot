@@ -1,29 +1,26 @@
 import os
-from google import genai
+import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# 🔑 ضع المفاتيح هنا
+BOT_TOKEN = "PUT_YOUR_BOT_TOKEN_HERE"
+OPENROUTER_API_KEY = "PUT_YOUR_OPENROUTER_API_KEY_HERE"
 
-# اسم مستخدم القناة (مهم)
-CHANNEL_USERNAME = "Kinnasha"
-
-client = genai.Client(api_key=GEMINI_API_KEY)
+# اسم القناة بدون @
+CHANNEL_USERNAME = "kinnasha"
 
 processed_messages = set()
 
-# 🧠 التلخيص
-import requests
-
+# 🧠 دالة التلخيص باستخدام OpenRouter
 def summarize(text):
-    text = text[:3000]
-
     try:
+        text = text[:3000]
+
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
-                "Authorization": "Bearer YOUR_OPENROUTER_API_KEY",
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                 "Content-Type": "application/json"
             },
             json={
@@ -44,22 +41,25 @@ def summarize(text):
             }
         )
 
-        return response.json()["choices"][0]["message"]["content"]
+        data = response.json()
+
+        return data["choices"][0]["message"]["content"]
 
     except Exception as e:
         return f"❌ خطأ: {e}"
-# 📥 استقبال الرسائل في المجموعة
+
+# 📥 استقبال الرسائل
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
 
     if not message:
         return
 
-    # التحقق أن الرسالة من قناة
+    # لازم تكون الرسالة من قناة
     if not message.sender_chat:
         return
 
-    # التأكد أنها من قناتك فقط
+    # التأكد أنها من القناة المطلوبة
     if message.sender_chat.username != CHANNEL_USERNAME:
         return
 
@@ -67,11 +67,11 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if message.message_id in processed_messages:
         return
 
-    # يجب أن تكون نص
+    # لازم تكون نص
     if not message.text:
         return
 
-    # شرط الطول
+    # شرط عدد الكلمات
     if len(message.text.split()) < 75:
         return
 
@@ -81,7 +81,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     summary = summarize(message.text)
 
-    # الرد على نفس الرسالة
     await message.reply_text(f"📌 التلخيص:\n\n{summary}")
 
 # 🚀 تشغيل البوت
