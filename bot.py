@@ -1,26 +1,23 @@
 import os
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-    filters
-)
+from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, CallbackQueryHandler, ContextTypes, filters
 
+# 🔑 مفاتيح
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# 📡 تخزين القناة لكل مجموعة
-group_channels = {}
-
-# 🔒 قناة الاشتراك (بدون @)
+# 🔒 قناة الاشتراك الإجباري
 REQUIRED_CHANNEL = "nst3li8"
 
+# 📡 تخزين القنوات لكل مجموعة
+group_channels = {}
 
+processed_messages = set()
+
+# =============================
 # ✅ التحقق من الاشتراك
+# =============================
 async def is_subscribed(user_id, context):
     try:
         member = await context.bot.get_chat_member(
@@ -28,84 +25,92 @@ async def is_subscribed(user_id, context):
             user_id=user_id
         )
         return member.status in ["member", "administrator", "creator"]
-    except Exception as e:
-        print("SUB ERROR:", e)
+    except:
         return False
 
-
-# 🧠 التلخيص
+# =============================
+# 🧠 التلخيص (كما هو عندك)
+# =============================
 def summarize(text):
-    try:
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": "qwen/qwen3.6-plus-preview:free",
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": f"""
+    models = [
+        "qwen/qwen3.6-plus-preview:free"
+    ]
+
+    text = text[:3000]
+
+    for model in models:
+        try:
+            print(f"🔄 Trying model: {model}")
+
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": model,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": f"""
 لخص النص التالي:
+- في نقاط واضحة
+- بأسلوب بسيط
 
-- اجعله في نقاط واضحة
-- عناوين النقاط بالخط العريض
-- ضع مسافة بين كل نقطة
-
-النص:
 {text}
 """
-                    }
-                ],
-                "temperature": 0.5
-            }
-        )
+                        }
+                    ]
+                }
+            )
 
-        data = response.json()
+            data = response.json()
 
-        if "choices" in data:
-            return data["choices"][0]["message"]["content"]
+            if "choices" in data:
+                return data["choices"][0]["message"]["content"]
 
-        return "❌ فشل التلخيص"
+        except Exception as e:
+            print("ERROR:", e)
+            continue
 
-    except Exception as e:
-        print("API ERROR:", e)
-        return "❌ خطأ في التلخيص"
+    return "❌ فشل التلخيص"
 
-
-# 🚀 start
+# =============================
+# 🚀 /start
+# =============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
-        [InlineKeyboardButton("📢 اشترك", url=f"https://t.me/{REQUIRED_CHANNEL}")],
-        [InlineKeyboardButton("✅ تحقق", callback_data="check")]
+        [InlineKeyboardButton("📢 اشترك في القناة", url=f"https://t.me/{REQUIRED_CHANNEL}")],
+        [InlineKeyboardButton("✅ تحقق من الاشتراك", callback_data="check_sub")]
     ]
 
     await update.message.reply_text(
-        "🔒 يجب الاشتراك أولاً",
+        "🔒 يجب الاشتراك أولاً لاستخدام البوت",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-
+# =============================
 # 🔘 تحقق الاشتراك
-async def check(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# =============================
+async def check_sub(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     if await is_subscribed(query.from_user.id, context):
         await query.edit_message_text(
             "✅ تم التحقق\n\n"
-            "📌 أضفني إلى مجموعة\n"
-            "📌 اجعلني مشرفًا\n"
-            "📌 أرسل يوزر القناة داخل المجموعة\n\n"
-            "مثال:\n@example"
+            "📌 الآن:\n"
+            "1. أضفني إلى مجموعة\n"
+            "2. اجعلني مشرفًا\n"
+            "3. أرسل يوزر القناة داخل المجموعة"
         )
     else:
         await query.answer("❌ لم تشترك بعد", show_alert=True)
 
-
-# 📥 تعيين قناة (مرة واحدة فقط)
+# =============================
+# 📥 تحديد القناة (مرة واحدة فقط)
+# =============================
 async def set_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
 
@@ -120,20 +125,20 @@ async def set_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     group_id = message.chat_id
 
-    # ❗ منع تغيير القناة
+    # ❗ إذا تم تحديد قناة مسبقًا → تجاهل
     if group_id in group_channels:
-        await message.reply_text("⚠️ تم تعيين قناة مسبقًا ولا يمكن تغييرها")
         return
 
     username = message.text.replace("@", "").lower()
     group_channels[group_id] = username
 
-    await message.reply_text(f"✅ تم تفعيل القناة @{username}")
+    print(f"✅ تم حفظ القناة: {username}")
 
-
-# 🔥 التقاط كل الرسائل (الحل الحقيقي)
-async def handle_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.effective_message
+# =============================
+# 📡 التقاط رسائل القناة (كما كودك)
+# =============================
+async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
 
     if not message:
         return
@@ -143,55 +148,55 @@ async def handle_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     group_id = message.chat_id
 
+    # ❗ لازم تكون المجموعة مسجلة
     if group_id not in group_channels:
         return
 
-    target = group_channels[group_id]
-    sender = message.sender_chat.username
+    channel_username = group_channels[group_id]
 
-    if not sender:
+    # ❗ التأكد من القناة
+    if not message.sender_chat.username:
         return
 
-    print("📡 رسالة واردة من:", sender)
+    if message.sender_chat.username.lower() != channel_username:
+        return
 
-    if sender.lower() != target:
+    # منع التكرار
+    if message.message_id in processed_messages:
         return
 
     if not message.text:
         return
 
-    if len(message.text.split()) < 50:
+    if len(message.text.split()) < 75:
         return
 
-    print("🔥 تم اكتشاف رسالة القناة!")
+    processed_messages.add(message.message_id)
+
+    print("📌 تم اكتشاف رسالة من القناة")
 
     summary = summarize(message.text)
 
-    reply = f"""
-<b>قَالَ المُحَشِّي الفَاضِل:</b>
+    await message.reply_text(f"قَالَ المُحَشِّي الفَاضِل:\n\n{summary}")
 
-{summary}
-"""
-
-    await message.reply_text(reply, parse_mode="HTML")
-
-
-# 🚀 تشغيل البوت
+# =============================
+# 🚀 تشغيل
+# =============================
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(check, pattern="check"))
+    app.add_handler(CallbackQueryHandler(check_sub, pattern="check_sub"))
 
+    # استقبال يوزر القناة
     app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, set_channel))
 
-    # 🔥 مهم جدًا
-    app.add_handler(MessageHandler(filters.ALL, handle_all))
+    # التقاط الرسائل
+    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, handle_messages))
 
     print("✅ Bot is running...")
 
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
