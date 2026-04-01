@@ -3,18 +3,16 @@ from google import genai
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 
-# 🔑 قراءة المفاتيح من Environment
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# 🔁 منع التكرار
+client = genai.Client(api_key=GEMINI_API_KEY)
+
 processed_messages = set()
 
-# 🧠 دالة التلخيص (Gemini الجديد)
+# 🧠 تلخيص
 def summarize(text):
     try:
-        client = genai.Client(api_key=GEMINI_API_KEY)
-
         text = text[:3000]
 
         response = client.models.generate_content(
@@ -25,40 +23,59 @@ def summarize(text):
         return response.text
 
     except Exception as e:
-        return f"❌ خطأ في التلخيص: {e}"
+        return f"❌ خطأ: {e}"
 
-# 📌 عند تثبيت رسالة
-async def handle_pinned(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.message
+# 📌 التحقق من الرسالة المثبتة
+async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.channel_post
 
-    if message and message.pinned_message:
-        original = message.pinned_message
+    if not message:
+        return
 
-        if not original.text:
+    try:
+        chat = await context.bot.get_chat(message.chat.id)
+
+        # الحصول على آخر رسالة مثبتة
+        pinned = chat.pinned_message
+
+        if not pinned:
             return
 
-        if original.message_id in processed_messages:
+        # إذا الرسالة الحالية هي المثبتة
+        if message.message_id != pinned.message_id:
             return
 
-        text = original.text
-
-        if len(text.split()) < 75:
+        if message.message_id in processed_messages:
             return
 
-        processed_messages.add(original.message_id)
+        if not message.text:
+            return
 
-        print("📌 تم اكتشاف رسالة مثبتة")
+        if len(message.text.split()) < 75:
+            return
 
-        summary = summarize(text)
+        processed_messages.add(message.message_id)
 
-        await message.reply_text(f"📌 التلخيص:\n\n{summary}")
+        print("📌 تم اكتشاف رسالة مثبتة (بطريقة جديدة)")
 
-# 🚀 تشغيل البوت
+        summary = summarize(message.text)
+
+        # إرسال الرد (سيظهر في التعليقات)
+        await context.bot.send_message(
+            chat_id=message.chat.id,
+            text=f"📌 التلخيص:\n\n{summary}",
+            reply_to_message_id=message.message_id
+        )
+
+    except Exception as e:
+        print(f"❌ Error: {e}")
+
+# 🚀 تشغيل
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(
-        MessageHandler(filters.StatusUpdate.PINNED_MESSAGE, handle_pinned)
+        MessageHandler(filters.ALL & filters.ChatType.CHANNEL, handle_channel_post)
     )
 
     print("✅ Bot is running...")
