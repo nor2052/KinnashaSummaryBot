@@ -43,43 +43,34 @@ def summarize(text):
     return "❌ فشل التلخيص"
 
 # =============================
-# 📌 تسجيل القناة (مصَحَّح)
-# =============================
-async def register_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.message
-
-    if not message:
-        return
-
-    if not message.sender_chat:
-        return
-
-    # 🔥 مهم: فقط إذا كانت قناة
-    if message.sender_chat.type != "channel":
-        return
-
-    group_id = message.chat_id
-
-    if group_id not in group_channels:
-        group_channels[group_id] = message.sender_chat.id
-
-        print("✅ تم تسجيل القناة الصحيحة:")
-        print("NAME:", message.sender_chat.title)
-        print("ID:", message.sender_chat.id)
-
-# =============================
-# 📥 التقاط الرسائل (مصَحَّح)
+# 📥 استقبال الرسائل
 # =============================
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("🔥 UPDATE RECEIVED")
+
     message = update.message
-
-    print("\n📩 ===== NEW UPDATE =====")
-
     if not message:
+        print("❌ لا يوجد message")
         return
 
     group_id = message.chat_id
 
+    # 🔍 عرض كل شيء للتشخيص
+    print("TEXT:", message.text)
+    print("SENDER_CHAT:", message.sender_chat)
+    print("FORWARD:", message.forward_from_chat)
+
+    # =============================
+    # 📌 تسجيل القناة (مرة واحدة)
+    # =============================
+    if message.sender_chat and message.sender_chat.type == "channel":
+        if group_id not in group_channels:
+            group_channels[group_id] = message.sender_chat.id
+            print("✅ تم تسجيل القناة:", message.sender_chat.title)
+
+    # =============================
+    # ❗ إذا لم تسجل قناة → خروج
+    # =============================
     if group_id not in group_channels:
         print("❌ لا توجد قناة مسجلة")
         return
@@ -91,7 +82,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if message.sender_chat and message.sender_chat.type == "channel":
         detected_channel_id = message.sender_chat.id
 
-    # Forward
+    # forward
     elif message.forward_from_chat:
         detected_channel_id = message.forward_from_chat.id
 
@@ -103,7 +94,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("🎯 Target:", target_channel_id)
 
     if detected_channel_id != target_channel_id:
-        print("❌ القناة مختلفة")
+        print("❌ قناة مختلفة")
         return
 
     if message.message_id in processed_messages:
@@ -119,7 +110,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     processed_messages.add(message.message_id)
 
-    print("✅ تم اكتشاف الرسالة الصحيحة!")
+    print("✅ تم التقاط الرسالة!")
 
     summary = summarize(message.text)
 
@@ -131,12 +122,12 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    app.add_handler(MessageHandler(filters.ALL, register_channel))
     app.add_handler(MessageHandler(filters.ALL, handle_messages))
 
     print("✅ Bot is running...")
 
-    app.run_polling()
+    # 🔥 هذا هو الحل الحقيقي
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
