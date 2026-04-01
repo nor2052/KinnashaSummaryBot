@@ -1,12 +1,21 @@
 import os
 import requests
-from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, ContextTypes, filters
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder,
+    MessageHandler,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters
+)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
+# group_id -> {channel_id: channel_name}
 group_channels = {}
+
 processed_messages = set()
 
 # =============================
@@ -35,7 +44,6 @@ def summarize(text):
         )
 
         data = response.json()
-        print("📊 API RESPONSE:", data)
 
         if "choices" in data:
             return data["choices"][0]["message"]["content"]
@@ -46,94 +54,134 @@ def summarize(text):
     return "❌ فشل التلخيص"
 
 # =============================
-# 👋 /start
+# 👋 /start + أزرار
 # =============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("📊 عرض القنوات", callback_data="status")],
+        [InlineKeyboardButton("🔓 فك ارتباط قناة", callback_data="unlink_menu")]
+    ]
+
     await update.message.reply_text(
         "👋 مرحبًا بك في بوت التلخيص!\n\n"
-        "📌 طريقة الاستخدام:\n"
-        "1️⃣ أضف البوت إلى مجموعة\n"
-        "2️⃣ أرسل منشور من القناة داخل المجموعة\n\n"
-        "✅ سيتم ربط القناة تلقائيًا\n"
-        "✍️ بعدها سيتم تلخيص أي منشور طويل\n\n"
-        "🔧 أوامر:\n"
-        "/unlink - فك ارتباط القناة"
+        "📌 أضف البوت إلى مجموعة وأرسل منشور من قناة لبدء الربط.",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 # =============================
-# 🔓 /unlink
+# 📊 عرض القنوات
 # =============================
-async def unlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    group_id = update.effective_chat.id
+async def show_status(query):
+    group_id = query.message.chat.id
 
-    if group_id in group_channels:
-        del group_channels[group_id]
+    if group_id not in group_channels or not group_channels[group_id]:
+        await query.edit_message_text("❌ لا توجد قنوات مرتبطة")
+        return
 
-        await update.message.reply_text(
-            "🔓 تم فك ارتباط القناة بنجاح\n"
-            "📌 يمكنك الآن ربط قناة جديدة"
+    text = "📡 القنوات المرتبطة:\n\n"
+    for ch_name in group_channels[group_id].values():
+        text += f"- {ch_name}\n"
+
+    await query.edit_message_text(text)
+
+# =============================
+# 🔓 قائمة فك الارتباط
+# =============================
+async def unlink_menu(query):
+    group_id = query.message.chat.id
+
+    if group_id not in group_channels or not group_channels[group_id]:
+        await query.edit_message_text("❌ لا توجد قنوات لفك ارتباطها")
+        return
+
+    keyboard = []
+
+    for ch_id, ch_name in group_channels[group_id].items():
+        keyboard.append([
+            InlineKeyboardButton(
+                f"❌ {ch_name}",
+                callback_data=f"unlink_{ch_id}"
+            )
+        ])
+
+    await query.edit_message_text(
+        "اختر القناة التي تريد فك ارتباطها:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+# =============================
+# ❌ تنفيذ فك الارتباط
+# =============================
+async def unlink_channel(query):
+    group_id = query.message.chat.id
+    channel_id = int(query.data.split("_")[1])
+
+    if group_id in group_channels and channel_id in group_channels[group_id]:
+        channel_name = group_channels[group_id][channel_id]
+
+        del group_channels[group_id][channel_id]
+
+        await query.edit_message_text(
+            f"✅ تم فك ارتباط القناة:\n{channel_name}"
         )
     else:
-        await update.message.reply_text(
-            "❌ لا توجد قناة مرتبطة بالفعل"
-        )
+        await query.edit_message_text("❌ القناة غير موجودة")
 
 # =============================
-# 📥 استقبال الرسائل
+# 🎯 التعامل مع الأزرار
+# =============================
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "status":
+        await show_status(query)
+
+    elif query.data == "unlink_menu":
+        await unlink_menu(query)
+
+    elif query.data.startswith("unlink_"):
+        await unlink_channel(query)
+
+# =============================
+# 📥 الرسائل
 # =============================
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("🔥 UPDATE RECEIVED")
-
     message = update.message
     if not message:
-        print("❌ لا يوجد message")
         return
 
     group_id = message.chat_id
 
-    print("TEXT:", message.text)
-    print("SENDER_CHAT:", message.sender_chat)
-    print("FORWARD:", message.forward_from_chat)
-
-    # =============================
-    # 📌 تسجيل القناة
-    # =============================
-    if message.sender_chat and message.sender_chat.type == "channel":
-        if group_id not in group_channels:
-            group_channels[group_id] = message.sender_chat.id
-
-            await message.reply_text(
-                f"✅ تم ربط القناة:\n{message.sender_chat.title}"
-            )
-
-            print("✅ تم تسجيل القناة")
-
-    # =============================
-    # ❗ لا توجد قناة
-    # =============================
-    if group_id not in group_channels:
-        if message.text and not message.text.startswith("/"):
-            await message.reply_text(
-                "⚠️ لم يتم ربط قناة بعد\n"
-                "📌 أرسل منشور من قناة لبدء الاستخدام"
-            )
-        return
-
-    target_channel_id = group_channels[group_id]
     detected_channel_id = None
+    channel_name = None
 
-    # قناة مباشرة
     if message.sender_chat and message.sender_chat.type == "channel":
         detected_channel_id = message.sender_chat.id
+        channel_name = message.sender_chat.title
 
-    # forward
     elif message.forward_from_chat:
         detected_channel_id = message.forward_from_chat.id
+        channel_name = message.forward_from_chat.title
+
+    # تسجيل القناة
+    if detected_channel_id:
+        if group_id not in group_channels:
+            group_channels[group_id] = {}
+
+        if detected_channel_id not in group_channels[group_id]:
+            group_channels[group_id][detected_channel_id] = channel_name
+
+            await message.reply_text(f"✅ تم ربط القناة:\n{channel_name}")
+
+    # لا توجد قناة
+    if group_id not in group_channels:
+        return
 
     if not detected_channel_id:
         return
 
-    if detected_channel_id != target_channel_id:
+    if detected_channel_id not in group_channels[group_id]:
         return
 
     if message.message_id in processed_messages:
@@ -147,8 +195,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     processed_messages.add(message.message_id)
 
-    print("✅ تم التقاط الرسالة!")
-
     summary = summarize(message.text)
 
     await message.reply_text(f"📌 التلخيص:\n\n{summary}")
@@ -160,10 +206,10 @@ def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("unlink", unlink))
+    app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.ALL, handle_messages))
 
-    print("✅ Bot is running...")
+    print("✅ Bot running...")
 
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
