@@ -7,7 +7,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # اسم مستخدم القناة (مهم)
-CHANNEL_USERNAME = "kinnasha"
+CHANNEL_USERNAME = "Kinnasha"
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
