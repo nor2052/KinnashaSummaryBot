@@ -5,7 +5,7 @@ from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filte
 
 # 🔑 ضع المفاتيح هنا
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-OPENROUTER_API_KEY = "PUT_YOUR_OPENROUTER_API_KEY_HERE"
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 # اسم القناة بدون @
 CHANNEL_USERNAME = "Kinnasha"
