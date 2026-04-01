@@ -16,6 +16,8 @@ processed_messages = set()
 # 🧠 التلخيص
 def summarize(text):
     models = [
+        "gemini-3-flash",
+        "gemini-3-pro",
         "gemini-2.0-flash",
         "gemini-1.5-pro"
     ]
