@@ -129,5 +129,5 @@ def main():
     # 🔥 هذا هو الحل الحقيقي
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
-if name == "main":
+if __name__ == "__main__":
     main()
