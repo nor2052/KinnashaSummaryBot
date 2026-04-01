@@ -15,7 +15,7 @@ processed_messages = set()
 # 🧠 دالة التلخيص باستخدام OpenRouter
 def summarize(text):
     models = [
-        "meta-llama/llama-3-8b-instruct:free",
+        "qwen/qwen3.6-plus-preview:free",
         "google/gemma-7b-it:free",
         "mistralai/mistral-7b-instruct:free"
     ]
