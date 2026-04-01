@@ -16,8 +16,6 @@ processed_messages = set()
 # 🧠 التلخيص
 def summarize(text):
     models = [
-        "gemini-3-flash",
-        "gemini-3-pro",
         "gemini-2.0-flash",
         "gemini-1.5-pro"
     ]
@@ -30,25 +28,20 @@ def summarize(text):
 
             response = client.models.generate_content(
                 model=model_name,
-                contents=f"""
-لخص النص التالي بطريقة واضحة:
-- 3 نقاط فقط
-- بدون حشو
-- بأسلوب سهل القراءة
-
-النص:
-{text}
-"""
+                contents=[{
+                    "role": "user",
+                    "parts": [f"لخص النص التالي في 3 نقاط قصيرة:\n{text}"]
+                }]
             )
 
             print(f"✅ Success with: {model_name}")
-            return response.text
+            return response.candidates[0].content.parts[0].text
 
         except Exception as e:
             print(f"❌ Failed with {model_name}: {e}")
             continue
 
-    return "❌ لم ينجح أي نموذج في التلخيص"
+    return "❌ فشل الاتصال بـ Gemini API"
 # 📥 استقبال الرسائل في المجموعة
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
