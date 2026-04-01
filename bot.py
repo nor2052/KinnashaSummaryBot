@@ -73,6 +73,7 @@ async def register_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # =============================
 # 📥 التقاط الرسائل
+
 # =============================
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
@@ -152,3 +153,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
+async def test(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("🔥 BOT IS RECEIVING MESSAGES")
+
+app.add_handler(MessageHandler(filters.ALL, test))
