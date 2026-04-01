@@ -24,7 +24,7 @@ def summarize(text):
                 "Content-Type": "application/json"
             },
             json={
-                "model": "mistralai/mistral-7b-instruct:free",  # ✅ هذا هو السطر المهم
+                "model": "mistralai/mistral-7b-instruct:free",
                 "messages": [
                     {
                         "role": "user",
@@ -43,7 +43,14 @@ def summarize(text):
 
         data = response.json()
 
-        return data["choices"][0]["message"]["content"]
+        # 🔍 اطبع الرد الكامل للتشخيص
+        print("📊 API RESPONSE:", data)
+
+        # ✅ تحقق قبل الاستخدام
+        if "choices" in data:
+            return data["choices"][0]["message"]["content"]
+        else:
+            return f"❌ خطأ من API:\n{data}"
 
     except Exception as e:
         return f"❌ خطأ: {e}"
