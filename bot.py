@@ -4,7 +4,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 
 # 🔑 ضع المفاتيح هنا
-BOT_TOKEN = "PUT_YOUR_BOT_TOKEN_HERE"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = "PUT_YOUR_OPENROUTER_API_KEY_HERE"
 
 # اسم القناة بدون @
