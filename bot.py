@@ -143,22 +143,34 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not message:
         return
 
-    if not message.sender_chat:
-        return
-
     group_id = message.chat_id
 
-    # ❗ لازم تكون المجموعة مسجلة
+    # لازم تكون المجموعة مسجلة
     if group_id not in group_channels:
         return
 
     channel_username = group_channels[group_id]
 
-    # ❗ التأكد من القناة
-    if not message.sender_chat.username:
+    detected_username = None
+
+    # الحالة 1: رسالة مباشرة من القناة
+    if message.sender_chat:
+        if message.sender_chat.username:
+            detected_username = message.sender_chat.username.lower()
+
+    # الحالة 2: رسالة forwarded من القناة
+    elif message.forward_from_chat:
+        if message.forward_from_chat.username:
+            detected_username = message.forward_from_chat.username.lower()
+
+    # إذا ما قدرنا نحدد القناة → تجاهل
+    if not detected_username:
         return
 
-    if message.sender_chat.username.lower() != channel_username:
+    print("📡 Detected channel:", detected_username)
+
+    # مقارنة مع القناة المطلوبة
+    if detected_username != channel_username:
         return
 
     # منع التكرار
@@ -173,7 +185,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     processed_messages.add(message.message_id)
 
-    print("📌 تم اكتشاف رسالة من القناة")
+    print("📌 تم اكتشاف رسالة من القناة بنجاح!")
 
     summary = summarize(message.text)
 
