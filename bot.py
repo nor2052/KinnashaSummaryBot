@@ -14,23 +14,24 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 processed_messages = set()
 
 # 🧠 التلخيص
-def summarize(text):
-    models = [
-        "gemini-3-flash",
-        "gemini-3-pro",
-        "gemini-2.0-flash",
-        "gemini-1.5-pro"
-    ]
+import requests
 
+def summarize(text):
     text = text[:3000]
 
-    for model_name in models:
-        try:
-            print(f"🔄 Trying model: {model_name}")
-
-            response = client.models.generate_content(
-                model=model_name,
-                contents=f"""
+    try:
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": "Bearer YOUR_OPENROUTER_API_KEY",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "openai/gpt-3.5-turbo",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": f"""
 لخص النص التالي:
 - في 3 نقاط
 - بأسلوب واضح ومختصر
@@ -38,18 +39,15 @@ def summarize(text):
 النص:
 {text}
 """
-            )
+                    }
+                ]
+            }
+        )
 
-            print(f"✅ Success with: {model_name}")
+        return response.json()["choices"][0]["message"]["content"]
 
-            # 🔥 الطريقة الصحيحة لاستخراج النص
-            return response.text
-
-        except Exception as e:
-            print(f"❌ Failed with {model_name}: {e}")
-            continue
-
-    return "❌ فشل التلخيص"
+    except Exception as e:
+        return f"❌ خطأ: {e}"
 # 📥 استقبال الرسائل في المجموعة
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
