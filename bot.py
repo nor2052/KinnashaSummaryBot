@@ -1,45 +1,16 @@
 import os
 import requests
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder,
-    MessageHandler,
-    ContextTypes,
-    CallbackQueryHandler,
-    filters
-)
+from telegram import Update
+from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-
-# 🔐 القناة المطلوبة
-REQUIRED_CHANNEL = "@nst3li8"
 
 group_channels = {}
 processed_messages = set()
 
 # =============================
-# 🔔 أزرار الاشتراك
-# =============================
-def subscription_buttons():
-    keyboard = [
-        [InlineKeyboardButton("🔔 اشترك في القناة", url="https://t.me/nst3li8")],
-        [InlineKeyboardButton("✅ تحقق من الاشتراك", callback_data="check_sub")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-# =============================
-# 🔍 التحقق من الاشتراك
-# =============================
-async def is_subscribed(user_id, context):
-    try:
-        member = await context.bot.get_chat_member(REQUIRED_CHANNEL, user_id)
-        return member.status in ["member", "administrator", "creator"]
-    except:
-        return False
-
-# =============================
-# 🧠 التلخيص (محسّن)
+# 🧠 التلخيص
 # =============================
 def summarize(text):
     try:
@@ -53,22 +24,8 @@ def summarize(text):
                 "model": "qwen/qwen3.6-plus-preview:free",
                 "messages": [
                     {
-                        "role": "system",
-                        "content": "أنت مساعد ذكي متخصص في التلخيص الاحترافي."
-                    },
-                    {
                         "role": "user",
-                        "content": f"""
-لخص النص التالي بأسلوب احترافي:
-
-- استخدم نقاط واضحة
-- اجعل الجمل قصيرة
-- استخرج الأفكار الأساسية فقط
-- لا تضف شرح من عندك
-
-النص:
-{text}
-"""
+                        "content": f"لخص النص التالي في نقاط واضحة:\n{text}"
                     }
                 ]
             }
@@ -94,16 +51,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
     if not message:
         print("❌ لا يوجد message")
-        return
-
-    user_id = message.from_user.id
-
-    # 🔐 تحقق الاشتراك
-    if not await is_subscribed(user_id, context):
-        await message.reply_text(
-            "🚫 يجب الاشتراك في القناة أولاً لاستخدام البوت",
-            reply_markup=subscription_buttons()
-        )
         return
 
     group_id = message.chat_id
@@ -167,25 +114,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     summary = summarize(message.text)
 
-    await message.reply_text(
-        f"📌 *التلخيص:*\n\n{summary}",
-        parse_mode="Markdown"
-    )
-
-# =============================
-# 🔘 التعامل مع الأزرار
-# =============================
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    user_id = query.from_user.id
-
-    if query.data == "check_sub":
-        if await is_subscribed(user_id, context):
-            await query.edit_message_text("✅ تم التحقق! يمكنك الآن استخدام البوت 🎉")
-        else:
-            await query.answer("❌ لم تشترك بعد!", show_alert=True)
+    await message.reply_text(f"📌 التلخيص:\n\n{summary}")
 
 # =============================
 # 🚀 تشغيل
@@ -194,12 +123,11 @@ def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(MessageHandler(filters.ALL, handle_messages))
-    app.add_handler(CallbackQueryHandler(button_handler))
 
     print("✅ Bot is running...")
 
+    # 🔥 هذا هو الحل الحقيقي
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
-# ✅ إصلاح الخطأ
-if __name__ == "__main__":
+if name == "main":
     main()
