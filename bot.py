@@ -1,16 +1,45 @@
 import os
 import requests
-from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, ContextTypes, filters
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder,
+    MessageHandler,
+    ContextTypes,
+    CallbackQueryHandler,
+    filters
+)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+
+# 🔐 القناة المطلوبة
+REQUIRED_CHANNEL = "@nst3li8"
 
 group_channels = {}
 processed_messages = set()
 
 # =============================
-# 🧠 التلخيص
+# 🔔 أزرار الاشتراك
+# =============================
+def subscription_buttons():
+    keyboard = [
+        [InlineKeyboardButton("🔔 اشترك في القناة", url="https://t.me/nst3li8")],
+        [InlineKeyboardButton("✅ تحقق من الاشتراك", callback_data="check_sub")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+# =============================
+# 🔍 التحقق من الاشتراك
+# =============================
+async def is_subscribed(user_id, context):
+    try:
+        member = await context.bot.get_chat_member(REQUIRED_CHANNEL, user_id)
+        return member.status in ["member", "administrator", "creator"]
+    except:
+        return False
+
+# =============================
+# 🧠 التلخيص (محسّن)
 # =============================
 def summarize(text):
     try:
@@ -24,8 +53,22 @@ def summarize(text):
                 "model": "qwen/qwen3.6-plus-preview:free",
                 "messages": [
                     {
+                        "role": "system",
+                        "content": "أنت مساعد ذكي متخصص في التلخيص الاحترافي."
+                    },
+                    {
                         "role": "user",
-                        "content": f"لخص النص التالي في نقاط واضحة وقم بكتابة النص بطريقة مقروءة وضع مسافات بين النقاط واجعل النصر اختصارًا للنص الأصلي ولا تكتب أي شيء قبل الملخص فقط أرسل الملخص وحسب دون أن تبين أنك ترد على أحد جاعلًا منه نصًا موضوعيًا:\n{text}"
+                        "content": f"""
+لخص النص التالي بأسلوب احترافي:
+
+- استخدم نقاط واضحة
+- اجعل الجمل قصيرة
+- استخرج الأفكار الأساسية فقط
+- لا تضف شرح من عندك
+
+النص:
+{text}
+"""
                     }
                 ]
             }
@@ -43,20 +86,6 @@ def summarize(text):
     return "❌ فشل التلخيص"
 
 # =============================
-# 🚀 رسالة البداية
-# =============================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 أهلاً بك!\n\n"
-        "📌 طريقة الاستخدام:\n\n"
-        "1️⃣ أضف البوت إلى مجموعة\n"
-        "2️⃣ اجعله مشرف\n"
-        "3️⃣ أرسل منشور من القناة داخل المجموعة\n\n"
-        "✅ سيقوم البوت تلقائيًا بالتعرف على القناة وربطها\n"
-        "✍️ بعدها أي منشور طويل سيتم تلخيصه تلقائيًا"
-    )
-
-# =============================
 # 📥 استقبال الرسائل
 # =============================
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -64,79 +93,72 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     message = update.message
     if not message:
+        print("❌ لا يوجد message")
+        return
+
+    user_id = message.from_user.id
+
+    # 🔐 تحقق الاشتراك
+    if not await is_subscribed(user_id, context):
+        await message.reply_text(
+            "🚫 يجب الاشتراك في القناة أولاً لاستخدام البوت",
+            reply_markup=subscription_buttons()
+        )
         return
 
     group_id = message.chat_id
 
+    # 🔍 عرض كل شيء للتشخيص
     print("TEXT:", message.text)
     print("SENDER_CHAT:", message.sender_chat)
     print("FORWARD:", message.forward_from_chat)
 
-    detected_channel_id = None
-    channel_title = None
-
-    # 📡 قناة مباشرة
+    # =============================
+    # 📌 تسجيل القناة (مرة واحدة)
+    # =============================
     if message.sender_chat and message.sender_chat.type == "channel":
-        detected_channel_id = message.sender_chat.id
-        channel_title = message.sender_chat.title
-
-    # 📡 forward
-    elif message.forward_from_chat:
-        detected_channel_id = message.forward_from_chat.id
-        channel_title = message.forward_from_chat.title
+        if group_id not in group_channels:
+            group_channels[group_id] = message.sender_chat.id
+            print("✅ تم تسجيل القناة:", message.sender_chat.title)
 
     # =============================
-    # ❗ لا توجد قناة مرتبطة
+    # ❗️ إذا لم تسجل قناة → خروج
     # =============================
     if group_id not in group_channels:
-        if detected_channel_id:
-            group_channels[group_id] = detected_channel_id
-
-            await message.reply_text(
-                f"✅ تم ربط القناة:\n{channel_title}\n\n"
-                "🎯 الآن أرسل أي منشور طويل وسيتم تلخيصه"
-            )
-
-            print("✅ تم تسجيل القناة")
-        else:
-            # رسالة توجيه
-            if message.text and message.text.startswith("/"):
-                return
-
-            await message.reply_text(
-                "⚠️ لم يتم ربط قناة بعد\n\n"
-                "📌 أرسل منشور من القناة (أو forward) لربطها"
-            )
+        print("❌ لا توجد قناة مسجلة")
         return
 
-    # =============================
-    # ❌ قناة مختلفة
-    # =============================
-    if detected_channel_id and detected_channel_id != group_channels[group_id]:
-        print("❌ قناة مختلفة")
+    target_channel_id = group_channels[group_id]
+    detected_channel_id = None
 
-        await message.reply_text(
-            "❌ هذه ليست القناة المرتبطة\n"
-            "⚠️ لا يمكن تغيير القناة بعد ربطها"
-        )
-        return
+    # قناة مباشرة
+    if message.sender_chat and message.sender_chat.type == "channel":
+        detected_channel_id = message.sender_chat.id
 
-    # =============================
-    # ❗ ليست رسالة قناة
-    # =============================
+    # forward
+    elif message.forward_from_chat:
+        detected_channel_id = message.forward_from_chat.id
+
     if not detected_channel_id:
+        print("❌ ليست رسالة قناة")
         return
 
-    # =============================
-    # فلترة الرسائل
-    # =============================
+    print("📡 Detected:", detected_channel_id)
+    print("🎯 Target:", target_channel_id)
+
+    if detected_channel_id != target_channel_id:
+        print("❌ قناة مختلفة")
+        return
+
     if message.message_id in processed_messages:
         return
 
     if not message.text:
+        print("❌ لا يوجد نص")
         return
 
     if len(message.text.split()) < 75:
+        print("❌ النص قصير")
         return
 
     processed_messages.add(message.message_id)
@@ -145,7 +167,25 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     summary = summarize(message.text)
 
-    await message.reply_text(f"قَالَ المُحَشِّي الفَاضِل:\n\n{summary}")
+    await message.reply_text(
+        f"📌 *التلخيص:*\n\n{summary}",
+        parse_mode="Markdown"
+    )
+
+# =============================
+# 🔘 التعامل مع الأزرار
+# =============================
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+
+    if query.data == "check_sub":
+        if await is_subscribed(user_id, context):
+            await query.edit_message_text("✅ تم التحقق! يمكنك الآن استخدام البوت 🎉")
+        else:
+            await query.answer("❌ لم تشترك بعد!", show_alert=True)
 
 # =============================
 # 🚀 تشغيل
@@ -153,12 +193,13 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.ALL, handle_messages))
+    app.add_handler(CallbackQueryHandler(button_handler))
 
     print("✅ Bot is running...")
 
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
+# ✅ إصلاح الخطأ
 if __name__ == "__main__":
     main()
