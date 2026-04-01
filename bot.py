@@ -42,8 +42,8 @@ def summarize(text):
 - في عدد نقاط مناسب
 - بأسلوب واضح ومختصر
 
-النص:
-**{text}**
+النص: 
+**{text}** 
 """
                         }
                     ]
@@ -99,7 +99,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     summary = summarize(message.text)
 
-    await message.reply_text(f"**قَالَ المُحَشِّي الفَاضِل:**:\n\n{summary}")
+    await message.reply_text(f" **قَالَ المُحَشِّي الفَاضِل:** : \n\n{summary}")
 
 # 🚀 تشغيل البوت
 def main():
