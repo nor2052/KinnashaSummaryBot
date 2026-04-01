@@ -25,7 +25,10 @@ def summarize(text):
                 "messages": [
                     {
                         "role": "user",
-                        "content": f"لخص النص التالي في نقاط واضحة:\n{text}"
+                        "content": f"لخص النص التالي:
+- في عدد نقاط مناسب
+- بأسلوب واضح ومختصر
+وقم بكتابة النص بطريقة مقروءة وضع مسافات بين النقاط واجعل النصر اختصارًا للنص الأصلي ولا تكتب أي شيء قبل الملخص فقط أرسل الملخص وحسب دون أن تبين أنك ترد على أحد جاعلًا منه نصًا موضوعيًا:\n{text}"
                     }
                 ]
             }
@@ -145,7 +148,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     summary = summarize(message.text)
 
-    await message.reply_text(f"📌 التلخيص:\n\n{summary}")
+    await message.reply_text(f"قَالَ المُحَشِّي الفَاضِل:\n\n{summary}")
 
 # =============================
 # 🚀 تشغيل
