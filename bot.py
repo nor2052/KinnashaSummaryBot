@@ -1,11 +1,10 @@
 import os
 import requests
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
     MessageHandler,
     CommandHandler,
-    CallbackQueryHandler,
     ContextTypes,
     filters
 )
@@ -57,65 +56,19 @@ def summarize(text):
 # 👋 /start
 # =============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("📊 عرض القنوات", callback_data="status")]
-    ]
-
     await update.message.reply_text(
         "👋 مرحبًا بك في بوت التلخيص!\n\n"
-        "📌 الاستخدام:\n"
+        "📌 طريقة الاستخدام:\n"
         "1️⃣ أضف البوت إلى مجموعة\n"
         "2️⃣ أرسل منشور من قناة داخل المجموعة\n\n"
         "✅ سيتم ربط القناة تلقائيًا\n"
         "✍️ بعدها سيتم تلخيص أي منشور طويل\n\n"
-        "⚠️ ملاحظة:\n"
-        "لفك الارتباط قم بإزالة القناة أو إعادة إضافة البوت",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        "⚠️ لفك الارتباط:\n"
+        "قم بإزالة القناة أو إعادة إضافة البوت"
     )
 
 # =============================
-# 📊 عرض القنوات
-# =============================
-async def show_status(query):
-    group_id = query.message.chat.id
-
-    if group_id not in group_channels or not group_channels[group_id]:
-        await safe_edit(query, "❌ لا توجد قنوات مرتبطة")
-        return
-
-    text = "📡 القنوات المرتبطة:\n\n"
-    for ch_name in group_channels[group_id].values():
-        text += f"- {ch_name}\n"
-
-    text += "\n⚠️ لفك الارتباط احذف القناة أو أعد إضافة البوت"
-
-    await safe_edit(query, text)
-
-# =============================
-# 🛡️ حل مشكلة timeout
-# =============================
-async def safe_edit(query, text):
-    try:
-        await query.answer()
-    except:
-        pass  # تجاهل الخطأ
-
-    try:
-        await query.edit_message_text(text)
-    except Exception as e:
-        print("❌ Edit error:", e)
-
-# =============================
-# 🎯 الأزرار
-# =============================
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-
-    if query.data == "status":
-        await show_status(query)
-
-# =============================
-# 📥 الرسائل
+# 📥 استقبال الرسائل
 # =============================
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
@@ -127,15 +80,19 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     detected_channel_id = None
     channel_name = None
 
+    # قناة مباشرة
     if message.sender_chat and message.sender_chat.type == "channel":
         detected_channel_id = message.sender_chat.id
         channel_name = message.sender_chat.title
 
+    # forward
     elif message.forward_from_chat:
         detected_channel_id = message.forward_from_chat.id
         channel_name = message.forward_from_chat.title
 
+    # =============================
     # تسجيل القناة
+    # =============================
     if detected_channel_id:
         if group_id not in group_channels:
             group_channels[group_id] = {}
@@ -145,6 +102,9 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             await message.reply_text(f"✅ تم ربط القناة:\n{channel_name}")
 
+    # =============================
+    # لا توجد قناة
+    # =============================
     if group_id not in group_channels:
         return
 
@@ -176,7 +136,6 @@ def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.ALL, handle_messages))
 
     print("✅ Bot running...")
