@@ -54,17 +54,22 @@ def summarize(text):
     return "❌ فشل التلخيص"
 
 # =============================
-# 👋 /start + أزرار
+# 👋 /start
 # =============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
-        [InlineKeyboardButton("📊 عرض القنوات", callback_data="status")],
-        [InlineKeyboardButton("🔓 فك ارتباط قناة", callback_data="unlink_menu")]
+        [InlineKeyboardButton("📊 عرض القنوات", callback_data="status")]
     ]
 
     await update.message.reply_text(
         "👋 مرحبًا بك في بوت التلخيص!\n\n"
-        "📌 أضف البوت إلى مجموعة وأرسل منشور من قناة لبدء الربط.",
+        "📌 الاستخدام:\n"
+        "1️⃣ أضف البوت إلى مجموعة\n"
+        "2️⃣ أرسل منشور من قناة داخل المجموعة\n\n"
+        "✅ سيتم ربط القناة تلقائيًا\n"
+        "✍️ بعدها سيتم تلخيص أي منشور طويل\n\n"
+        "⚠️ ملاحظة:\n"
+        "لفك الارتباط قم بإزالة القناة أو إعادة إضافة البوت",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -75,73 +80,39 @@ async def show_status(query):
     group_id = query.message.chat.id
 
     if group_id not in group_channels or not group_channels[group_id]:
-        await query.edit_message_text("❌ لا توجد قنوات مرتبطة")
+        await safe_edit(query, "❌ لا توجد قنوات مرتبطة")
         return
 
     text = "📡 القنوات المرتبطة:\n\n"
     for ch_name in group_channels[group_id].values():
         text += f"- {ch_name}\n"
 
-    await query.edit_message_text(text)
+    text += "\n⚠️ لفك الارتباط احذف القناة أو أعد إضافة البوت"
+
+    await safe_edit(query, text)
 
 # =============================
-# 🔓 قائمة فك الارتباط
+# 🛡️ حل مشكلة timeout
 # =============================
-async def unlink_menu(query):
-    group_id = query.message.chat.id
+async def safe_edit(query, text):
+    try:
+        await query.answer()
+    except:
+        pass  # تجاهل الخطأ
 
-    if group_id not in group_channels or not group_channels[group_id]:
-        await query.edit_message_text("❌ لا توجد قنوات لفك ارتباطها")
-        return
-
-    keyboard = []
-
-    for ch_id, ch_name in group_channels[group_id].items():
-        keyboard.append([
-            InlineKeyboardButton(
-                f"❌ {ch_name}",
-                callback_data=f"unlink_{ch_id}"
-            )
-        ])
-
-    await query.edit_message_text(
-        "اختر القناة التي تريد فك ارتباطها:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    try:
+        await query.edit_message_text(text)
+    except Exception as e:
+        print("❌ Edit error:", e)
 
 # =============================
-# ❌ تنفيذ فك الارتباط
-# =============================
-async def unlink_channel(query):
-    group_id = query.message.chat.id
-    channel_id = int(query.data.split("_")[1])
-
-    if group_id in group_channels and channel_id in group_channels[group_id]:
-        channel_name = group_channels[group_id][channel_id]
-
-        del group_channels[group_id][channel_id]
-
-        await query.edit_message_text(
-            f"✅ تم فك ارتباط القناة:\n{channel_name}"
-        )
-    else:
-        await query.edit_message_text("❌ القناة غير موجودة")
-
-# =============================
-# 🎯 التعامل مع الأزرار
+# 🎯 الأزرار
 # =============================
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
 
     if query.data == "status":
         await show_status(query)
-
-    elif query.data == "unlink_menu":
-        await unlink_menu(query)
-
-    elif query.data.startswith("unlink_"):
-        await unlink_channel(query)
 
 # =============================
 # 📥 الرسائل
@@ -174,7 +145,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             await message.reply_text(f"✅ تم ربط القناة:\n{channel_name}")
 
-    # لا توجد قناة
     if group_id not in group_channels:
         return
 
