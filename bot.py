@@ -1,7 +1,7 @@
 import os
 import requests
 from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
+from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, ContextTypes, filters
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -43,6 +43,20 @@ def summarize(text):
     return "❌ فشل التلخيص"
 
 # =============================
+# 🚀 رسالة البداية
+# =============================
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "👋 أهلاً بك!\n\n"
+        "📌 طريقة الاستخدام:\n\n"
+        "1️⃣ أضف البوت إلى مجموعة\n"
+        "2️⃣ اجعله مشرف\n"
+        "3️⃣ أرسل منشور من القناة داخل المجموعة\n\n"
+        "✅ سيقوم البوت تلقائيًا بالتعرف على القناة وربطها\n"
+        "✍️ بعدها أي منشور طويل سيتم تلخيصه تلقائيًا"
+    )
+
+# =============================
 # 📥 استقبال الرسائل
 # =============================
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -50,62 +64,79 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     message = update.message
     if not message:
-        print("❌ لا يوجد message")
         return
 
     group_id = message.chat_id
 
-    # 🔍 عرض كل شيء للتشخيص
     print("TEXT:", message.text)
     print("SENDER_CHAT:", message.sender_chat)
     print("FORWARD:", message.forward_from_chat)
 
-    # =============================
-    # 📌 تسجيل القناة (مرة واحدة)
-    # =============================
-    if message.sender_chat and message.sender_chat.type == "channel":
-        if group_id not in group_channels:
-            group_channels[group_id] = message.sender_chat.id
-            print("✅ تم تسجيل القناة:", message.sender_chat.title)
-
-    # =============================
-    # ❗ إذا لم تسجل قناة → خروج
-    # =============================
-    if group_id not in group_channels:
-        print("❌ لا توجد قناة مسجلة")
-        return
-
-    target_channel_id = group_channels[group_id]
     detected_channel_id = None
+    channel_title = None
 
-    # قناة مباشرة
+    # 📡 قناة مباشرة
     if message.sender_chat and message.sender_chat.type == "channel":
         detected_channel_id = message.sender_chat.id
+        channel_title = message.sender_chat.title
 
-    # forward
+    # 📡 forward
     elif message.forward_from_chat:
         detected_channel_id = message.forward_from_chat.id
+        channel_title = message.forward_from_chat.title
 
-    if not detected_channel_id:
-        print("❌ ليست رسالة قناة")
+    # =============================
+    # ❗ لا توجد قناة مرتبطة
+    # =============================
+    if group_id not in group_channels:
+        if detected_channel_id:
+            group_channels[group_id] = detected_channel_id
+
+            await message.reply_text(
+                f"✅ تم ربط القناة:\n{channel_title}\n\n"
+                "🎯 الآن أرسل أي منشور طويل وسيتم تلخيصه"
+            )
+
+            print("✅ تم تسجيل القناة")
+        else:
+            # رسالة توجيه
+            if message.text and message.text.startswith("/"):
+                return
+
+            await message.reply_text(
+                "⚠️ لم يتم ربط قناة بعد\n\n"
+                "📌 أرسل منشور من القناة (أو forward) لربطها"
+            )
         return
 
-    print("📡 Detected:", detected_channel_id)
-    print("🎯 Target:", target_channel_id)
-
-    if detected_channel_id != target_channel_id:
+    # =============================
+    # ❌ قناة مختلفة
+    # =============================
+    if detected_channel_id and detected_channel_id != group_channels[group_id]:
         print("❌ قناة مختلفة")
+
+        await message.reply_text(
+            "❌ هذه ليست القناة المرتبطة\n"
+            "⚠️ لا يمكن تغيير القناة بعد ربطها"
+        )
         return
 
+    # =============================
+    # ❗ ليست رسالة قناة
+    # =============================
+    if not detected_channel_id:
+        return
+
+    # =============================
+    # فلترة الرسائل
+    # =============================
     if message.message_id in processed_messages:
         return
 
     if not message.text:
-        print("❌ لا يوجد نص")
         return
 
     if len(message.text.split()) < 75:
-        print("❌ النص قصير")
         return
 
     processed_messages.add(message.message_id)
@@ -122,11 +153,11 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.ALL, handle_messages))
 
     print("✅ Bot is running...")
 
-    # 🔥 هذا هو الحل الحقيقي
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
