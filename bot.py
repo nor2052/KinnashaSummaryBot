@@ -8,7 +8,7 @@ BOT_TOKEN = "PUT_YOUR_BOT_TOKEN_HERE"
 OPENROUTER_API_KEY = "PUT_YOUR_OPENROUTER_API_KEY_HERE"
 
 # اسم القناة بدون @
-CHANNEL_USERNAME = "kinnasha"
+CHANNEL_USERNAME = "Kinnasha"
 
 processed_messages = set()
 
@@ -24,7 +24,7 @@ def summarize(text):
                 "Content-Type": "application/json"
             },
             json={
-                "model": "openai/gpt-3.5-turbo",
+                "model": "mistralai/mistral-7b-instruct:free",  # ✅ هذا هو السطر المهم
                 "messages": [
                     {
                         "role": "user",
@@ -47,7 +47,6 @@ def summarize(text):
 
     except Exception as e:
         return f"❌ خطأ: {e}"
-
 # 📥 استقبال الرسائل
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
