@@ -28,20 +28,26 @@ def summarize(text):
 
             response = client.models.generate_content(
                 model=model_name,
-                contents=[{
-                    "role": "user",
-                    "parts": [f"لخص النص التالي في 3 نقاط قصيرة:\n{text}"]
-                }]
+                contents=f"""
+لخص النص التالي:
+- في 3 نقاط
+- بأسلوب واضح ومختصر
+
+النص:
+{text}
+"""
             )
 
             print(f"✅ Success with: {model_name}")
-            return response.candidates[0].content.parts[0].text
+
+            # 🔥 الطريقة الصحيحة لاستخراج النص
+            return response.text
 
         except Exception as e:
             print(f"❌ Failed with {model_name}: {e}")
             continue
 
-    return "❌ فشل الاتصال بـ Gemini API"
+    return "❌ فشل التلخيص"
 # 📥 استقبال الرسائل في المجموعة
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
