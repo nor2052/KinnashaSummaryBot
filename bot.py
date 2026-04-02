@@ -127,7 +127,10 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     summary = summarize(message.text)
 
-    await message.reply_text(f"<b>قَالَ المُحَشِّي الفَاضِل:</b>\n{summary}")
+    await message.reply_text(
+    f"**قَالَ المُحَشِّي الفَاضِل:**\n\n{summary}", 
+    parse_mode="Markdown"
+)
 
 # =============================
 # 🚀 تشغيل
