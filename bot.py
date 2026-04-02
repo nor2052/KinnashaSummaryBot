@@ -100,8 +100,11 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if detected_channel_id not in group_channels[group_id]:
             group_channels[group_id][detected_channel_id] = channel_name
 
-            await message.reply_text(f"<b>أما بعد، فلمّا التمس منّي بعض الإخوة المقصّرين في العلم، والمنشغلين عنه بالفاني من المهلِكات، أن ألخّص ما ورد في القناة المسمّاة: {channel_name}، أجبتُ مستعينًا بالله.</b>")
-
+            await message.reply_text(
+    f"<b>أما بعد:</b>\n\n"
+    f"فلمّا التمس منّي بعض الإخوة المقصّرين في العلم، والمنشغلين عنه بالفاني من المهلِكات، "
+    f"أن ألخّص ما ورد في القناة المسمّاة: <b>{channel_name}</b>، أجبتُ مستعينًا بالله."
+)
     # =============================
     # لا توجد قناة
     # =============================
