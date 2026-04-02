@@ -209,7 +209,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.ALL, handle_messages))
-    app.add_handler(MessageHandler(filters.TEXT & filters.PRIVATE, add_channel))
+    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, add_channel))
     
     print("✅ Bot running...")
 
