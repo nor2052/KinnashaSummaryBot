@@ -101,9 +101,9 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             group_channels[group_id][detected_channel_id] = channel_name
 
             await message.reply_text(
-    f"<b>أما بعد:</b>\n\n"
+    f"</b>أما بعد:<b>\n"
     f"فلمّا التمس منّي بعض الإخوة المقصّرين في العلم، والمنشغلين عنه بالفاني من المهلِكات، "
-    f"أن ألخّص ما ورد في القناة المسمّاة: <b>{channel_name}</b>، أجبتُ مستعينًا بالله."
+    f"أن ألخّص ما ورد في القناة المسمّاة: </b>{channel_name}<b>، أجبتُ مستعينًا بالله."
 )
     # =============================
     # لا توجد قناة
