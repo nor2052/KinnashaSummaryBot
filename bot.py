@@ -153,23 +153,33 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =============================
 # 🔒 التحقق من أن القناة مسموحة
 # =============================
-    if detected_channel_id and message.sender_chat:
-        channel_username = message.sender_chat.username
-    elif detected_channel_id and message.forward_from_chat:
-        channel_username = message.forward_from_chat.username
-    else:
-        channel_username = None
+    # =============================
+# 🔒 التحقق من أن القناة مسموحة
+# =============================
 
-    if not channel_username:
+    channel_identifier = None
+
+    if message.sender_chat and message.sender_chat.type == "channel":
+        if message.sender_chat.username:
+            channel_identifier = "@" + message.sender_chat.username.lower()
+        else:
+            channel_identifier = str(message.sender_chat.id)
+    
+    elif message.forward_from_chat:
+        if message.forward_from_chat.username:
+            channel_identifier = "@" + message.forward_from_chat.username.lower()
+        else:
+            channel_identifier = str(message.forward_from_chat.id)
+
+    if not channel_identifier:
+        print("❌ لا يوجد معرف للقناة")
         return
 
-    channel_username = "@" + channel_username.lower()
-
-    # تحقق هل هذه القناة مسجلة عند أي مستخدم
-    allowed = any(channel_username in channels for channels in user_channels.values())
+    # تحقق
+    allowed = any(channel_identifier in channels for channels in user_channels.values())
 
     if not allowed:
-        print("⛔ قناة غير مسموحة")
+        print(f"⛔ غير مسموح: {channel_identifier}")
         return
     # =============================
     # لا توجد قناة
