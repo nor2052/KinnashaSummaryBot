@@ -71,7 +71,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # 📥 استقبال الرسائل
 # =============================
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.message
+    message = update.effective_message
     if not message:
         return
 
