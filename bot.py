@@ -1,6 +1,6 @@
 import os
 import requests
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     MessageHandler,
@@ -16,13 +16,14 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 # group_id -> {channel_id: channel_name}
 group_channels = {}
 
+# user_id -> set(group_ids)
+user_groups = {}
+
 processed_messages = set()
 
 # =============================
 # 🧠 التلخيص
 # =============================
-import requests
-
 def summarize(text):
     for model in MODELS:
         try:
@@ -52,14 +53,12 @@ def summarize(text):
             print(f"🔍 Trying model: {model}")
             print("Response:", data)
 
-            # ✅ إذا نجح
             if "choices" in data:
                 result = data["choices"][0]["message"]["content"]
                 if result.strip():
                     print(f"✅ Success with: {model}")
                     return result
 
-            # ❌ إذا فيه error
             if "error" in data:
                 print(f"❌ {model} failed:", data['error'].get("message"))
 
@@ -67,19 +66,23 @@ def summarize(text):
             print(f"❌ Exception with {model}:", e)
 
     return "❌ فشل التلخيص (جميع الموديلات لم تعمل)"
+
 # =============================
 # 👋 /start
 # =============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [["📂 عرض قنواتي"]]
+
+    reply_markup = ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True
+    )
+
     await update.message.reply_text(
         "👋 حللت أهلًا ووطِئتَ سهلاً في بوت <b>المُحَشِّي</b>!\n\n"
-        "📌 إليك طريقة عمله:\n"
-        "1️⃣ أنزل البوت مشرفًا المجموعة المرتبطة بقناتك\n"
-        "2️⃣ أرسل منشورً في قناتك\n\n"
-        "✅ سيكون الربط تلقائيًا\n"
-        "✍️ ها أنت ذا يُلَخَّص لك ما تشاء!\n\n"
-        "⚠️ لفك الارتباط:\n"
-        "أخرج البوت من مجموعة قناتك", parse_mode="HTML"
+        "اختر من القائمة 👇",
+        parse_mode="HTML",
+        reply_markup=reply_markup
     )
 
 # =============================
@@ -91,6 +94,39 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     group_id = message.chat_id
+
+    # ✅ حفظ المستخدم ومجموعاته
+    if message.from_user and not message.from_user.is_bot:
+        user_id = message.from_user.id
+
+        if user_id not in user_groups:
+            user_groups[user_id] = set()
+
+        user_groups[user_id].add(group_id)
+
+    # =============================
+    # زر عرض قنواتي
+    # =============================
+    if message.text == "📂 عرض قنواتي":
+        user_id = message.from_user.id if message.from_user else None
+
+        if not user_id or user_id not in user_groups:
+            await message.reply_text("❌ لا توجد مجموعات مسجلة لك")
+            return
+
+        groups_list = user_groups[user_id]
+
+        text = "📂 مجموعاتك التي تستخدم البوت:\n\n"
+
+        for gid in groups_list:
+            try:
+                chat = await context.bot.get_chat(gid)
+                text += f"• {chat.title}\n"
+            except:
+                text += "• مجموعة غير معروفة\n"
+
+        await message.reply_text(text)
+        return
 
     detected_channel_id = None
     channel_name = None
@@ -116,13 +152,14 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             group_channels[group_id][detected_channel_id] = channel_name
 
             await message.reply_text(
-    f"<b>أما بعد:</b>\n"
-    f"فلمّا التمس منّي بعض الإخوة المقصّرين في العلم، والمنشغلين عنه بالفاني من المهلِكات، "
-    f"أن ألخّص ما ورد في القناة المسمّاة: <b>{channel_name}</b>، أجبتُ مستعينًا بالله.",
-    parse_mode="HTML"
-)
+                f"<b>أما بعد:</b>\n"
+                f"فلمّا التمس منّي بعض الإخوة المقصّرين في العلم، والمنشغلين عنه بالفاني من المهلِكات، "
+                f"أن ألخّص ما ورد في القناة المسمّاة: <b>{channel_name}</b>، أجبتُ مستعينًا بالله.",
+                parse_mode="HTML"
+            )
+
     # =============================
-    # لا توجد قناة
+    # شروط التلخيص
     # =============================
     if group_id not in group_channels:
         return
@@ -147,9 +184,9 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     summary = summarize(message.text)
 
     await message.reply_text(
-    f"<b>قَالَ المُحَشِّي الفَاضِل:</b>\n\n{summary}",
-    parse_mode="HTML"
-)
+        f"<b>قَالَ المُحَشِّي الفَاضِل:</b>\n\n{summary}",
+        parse_mode="HTML"
+    )
 
 # =============================
 # 🚀 تشغيل
