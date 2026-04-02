@@ -9,6 +9,7 @@ from telegram.ext import (
     filters
 )
 
+MODELS = [ "qwen/qwen3.6-plus-preview:free", "google/lyria-3-clip-preview", "google/lyria-3-clip-preview", "qwen/qwen3.6-plus:free", "alibaba/wan-2.6", "bytedance/seedance-1-5-pro", "openai/sora-2-pro", "google/veo-3.1"]
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
@@ -20,41 +21,52 @@ processed_messages = set()
 # =============================
 # 🧠 التلخيص
 # =============================
+import requests
+
 def summarize(text):
-    try:
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": "qwen/qwen3.6-plus-preview:free",
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": f"""لخص النص التالي في نقاط واضحة، واحرص على ما يلي في تلخيصك، أولًا أن يكون التلخيص مختصرًا وفي جمل قصيرة، وأن يكون التلخيص فصيحًا لغويًا، وأن يكون هناك مسافات مريحة للعين بين النقاط،  وأن تورد تاريخ ولادة ووفاة من تذكره في التلخيص بين قوسين شرط أن تكون متأكدًا منه، ولا تطل في تلخيص النص فوق سبع نقاط، ولا تكتب أرقام النقاط فقط أدرجها، وتحدث بلغة موضوعية أي لا تبدأ جوابك بالقول إليك تلخيص النص أوحسنا فقط ابدأ بتلخيص النص :
+    for model in MODELS:
+        try:
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": model,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": f"""لخص النص التالي في نقاط واضحة، واحرص على ما يلي في تلخيصك، أولًا أن يكون التلخيص مختصرًا وفي جمل قصيرة، وأن يكون التلخيص فصيحًا لغويًا، وأن يكون هناك مسافات مريحة للعين بين النقاط، وأن تورد تاريخ ولادة ووفاة من تذكره في التلخيص بين قوسين شرط أن تكون متأكدًا منه، ولا تطل في تلخيص النص فوق سبع نقاط، ولا تكتب أرقام النقاط فقط أدرجها، وتحدث بلغة موضوعية أي لا تبدأ جوابك بالقول إليك تلخيص النص أو حسنا فقط ابدأ بتلخيص النص :
 
 {text}
 """
-                    }
-                ]
-            }
-        )
+                        }
+                    ]
+                },
+                timeout=30
+            )
 
-        data = response.json()
+            data = response.json()
 
-        if "choices" in data:
-            return data["choices"][0]["message"]["content"]
-        else:
-            return "❌ API لم يرجع نتيجة"
+            print(f"🔍 Trying model: {model}")
+            print("Response:", data)
 
+            # ✅ إذا نجح
+            if "choices" in data:
+                result = data["choices"][0]["message"]["content"]
+                if result.strip():
+                    print(f"✅ Success with: {model}")
+                    return result
 
-    except Exception as e:
-        print("❌ API ERROR:", e)
+            # ❌ إذا فيه error
+            if "error" in data:
+                print(f"❌ {model} failed:", data['error'].get("message"))
 
-    return "❌ فشل التلخيص"
+        except Exception as e:
+            print(f"❌ Exception with {model}:", e)
 
+    return "❌ فشل التلخيص (جميع الموديلات لم تعمل)"
 # =============================
 # 👋 /start
 # =============================
