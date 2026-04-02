@@ -9,8 +9,6 @@ from telegram.ext import (
     filters
 )
 
-# user_id -> set of channel usernames
-user_channels = {}
 MODELS = [ "qwen/qwen3.6-plus-preview:free", "qwen/qwen3.6-plus:free", "alibaba/wan-2.6", "openai/sora-2-pro", "google/veo-3.1"]
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -69,28 +67,6 @@ def summarize(text):
             print(f"❌ Exception with {model}:", e)
 
     return "❌ فشل التلخيص (جميع الموديلات لم تعمل)"
-
-
-
-async def add_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    message = update.effective_message
-
-    if not message.text:
-        return
-
-    text = message.text.strip()
-
-    if not text.startswith("@"):
-        await message.reply_text("❌ أرسل يوزر القناة بهذا الشكل: @channel_username")
-        return
-
-    if user_id not in user_channels:
-        user_channels[user_id] = set()
-
-    user_channels[user_id].add(text.lower())
-
-    await message.reply_text(f"✅ تم ربط القناة {text} بحسابك")    
 # =============================
 # 👋 /start
 # =============================
@@ -103,11 +79,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ سيكون الربط تلقائيًا\n"
         "✍️ ها أنت ذا يُلَخَّص لك ما تشاء!\n\n"
         "⚠️ لفك الارتباط:\n"
-        "أخرج البوت من مجموعة قناتك"
-        "3️⃣ أرسل يوزر قناتك بهذا الشكل: @channel_username\n"
-        , parse_mode="HTML"
+        "أخرج البوت من مجموعة قناتك", parse_mode="HTML"
     )
-    
 
 # =============================
 # 📥 استقبال الرسائل
@@ -148,39 +121,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     f"أن ألخّص ما ورد في القناة المسمّاة: <b>{channel_name}</b>، أجبتُ مستعينًا بالله.",
     parse_mode="HTML"
 )
-
-   
-# =============================
-# 🔒 التحقق من أن القناة مسموحة
-# =============================
-    # =============================
-# 🔒 التحقق من أن القناة مسموحة
-# =============================
-
-    channel_identifier = None
-
-    if message.sender_chat and message.sender_chat.type == "channel":
-        if message.sender_chat.username:
-            channel_identifier = "@" + message.sender_chat.username.lower()
-        else:
-            channel_identifier = str(message.sender_chat.id)
-    
-    elif message.forward_from_chat:
-        if message.forward_from_chat.username:
-            channel_identifier = "@" + message.forward_from_chat.username.lower()
-        else:
-            channel_identifier = str(message.forward_from_chat.id)
-
-    if not channel_identifier:
-        print("❌ لا يوجد معرف للقناة")
-        return
-
-    # تحقق
-    allowed = any(channel_identifier in channels for channels in user_channels.values())
-
-    if not allowed:
-        print(f"⛔ غير مسموح: {channel_identifier}")
-        return
     # =============================
     # لا توجد قناة
     # =============================
@@ -219,8 +159,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.ALL, handle_messages))
-    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, add_channel))
-    
+
     print("✅ Bot running...")
 
     app.run_polling(allowed_updates=Update.ALL_TYPES)
