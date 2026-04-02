@@ -9,7 +9,7 @@ from telegram.ext import (
     filters
 )
 
-MODELS = [ "qwen/qwen3.6-plus-preview:free", "google/lyria-3-clip-preview", "google/lyria-3-clip-preview", "qwen/qwen3.6-plus:free", "alibaba/wan-2.6", "bytedance/seedance-1-5-pro", "openai/sora-2-pro", "google/veo-3.1"]
+MODELS = [ "qwen/qwen3.6-plus-preview:free", "qwen/qwen3.6-plus:free", "alibaba/wan-2.6", "openai/sora-2-pro", "google/veo-3.1"]
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
