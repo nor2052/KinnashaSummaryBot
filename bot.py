@@ -100,7 +100,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if detected_channel_id not in group_channels[group_id]:
             group_channels[group_id][detected_channel_id] = channel_name
 
-            await message.reply_text(f"✅ تم ربط القناة:\n{channel_name}")
+            await message.reply_text(f"أما بعد \n فلمّا التمَس منّي بعض الإخوة المقصّرين في العلم، المنشغلين عنه بالفاني من المُهلِكات، أن ألخّص ما وَرَد في ال{channel_name} أجبت مستعينًا بالله:")
 
     # =============================
     # لا توجد قناة
