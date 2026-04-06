@@ -26,11 +26,15 @@ import requests
 def summarize(text):
     for model in MODELS:
         try:
+            print(f"🔍 Trying model: {model}")
+            
             response = requests.post(
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers={
                     "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://t.me/your_bot",  # أضف هذا
+                    "X-Title": "Telegram Summary Bot"  # وهذا
                 },
                 json={
                     "model": model,
@@ -42,29 +46,44 @@ def summarize(text):
 {text}
 """
                         }
-                    ]
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 1000
                 },
-                timeout=30
+                timeout=60  # زاد الوقت
             )
 
+            print(f"Response status: {response.status_code}")
+            
+            if response.status_code != 200:
+                print(f"❌ HTTP Error {response.status_code}: {response.text}")
+                continue
+                
             data = response.json()
+            print(f"Response keys: {data.keys() if data else 'No data'}")
 
-            print(f"🔍 Trying model: {model}")
-            print("Response:", data)
+            # تحقق من وجود error
+            if "error" in data:
+                print(f"❌ {model} API error:", data['error'].get('message', 'Unknown error'))
+                continue
 
-            # ✅ إذا نجح
-            if "choices" in data:
+            # تحقق من وجود choices
+            if "choices" in data and len(data["choices"]) > 0:
                 result = data["choices"][0]["message"]["content"]
-                if result.strip():
+                if result and result.strip():
                     print(f"✅ Success with: {model}")
                     return result
-
-            # ❌ إذا فيه error
-            if "error" in data:
-                print(f"❌ {model} failed:", data['error'].get("message"))
-
+                else:
+                    print(f"⚠️ {model} returned empty content")
+            else:
+                print(f"⚠️ {model} response missing 'choices'")
+                
+        except requests.exceptions.Timeout:
+            print(f"❌ Timeout with {model}")
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Request error with {model}: {e}")
         except Exception as e:
-            print(f"❌ Exception with {model}:", e)
+            print(f"❌ Exception with {model}: {e}")
 
     return "❌ فشل التلخيص (جميع الموديلات لم تعمل)"
 # =============================
