@@ -23,70 +23,87 @@ processed_messages = set()
 # =============================
 import requests
 
-def summarize(text):
-    for model in MODELS:
-        try:
-            print(f"🔍 Trying model: {model}")
-            
-            response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://t.me/your_bot",  # أضف هذا
-                    "X-Title": "Telegram Summary Bot"  # وهذا
-                },
-                json={
-                    "model": model,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": f"""لخص النص التالي في نقاط واضحة، واحرص على ما يلي في تلخيصك، أولًا أن يكون التلخيص مختصرًا وفي جمل قصيرة، وأن يكون التلخيص فصيحًا لغويًا، وأن يكون هناك مسافات مريحة للعين بين النقاط، وأن تورد تاريخ ولادة ووفاة من تذكره في التلخيص بين قوسين شرط أن تكون متأكدًا منه، وشرح المصطلح الأكثر استعمالًا، ولا تطل في تلخيص النص فوق ست نقاط، ولا تكتب النقاط فقط أدرجها، وتحدث بلغة موضوعية أي لا تبدأ جوابك بالقول إليك تلخيص النص أو حسنا فقط ابدأ بتلخيص النص :
+def summarize(text, max_attempts=10):
+    """
+    تحاول التلخيص حتى 10 مرات باستخدام نماذج مختلفة
+    إذا نجحت في أي محاولة، تعيد النتيجة فورًا
+    """
+    for attempt in range(1, max_attempts + 1):
+        for model in MODELS:
+            try:
+                print(f"🔄 المحاولة {attempt}/{max_attempts} - جاري تجربة النموذج: {model}")
+                
+                response = requests.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://t.me/your_bot",
+                        "X-Title": "Telegram Summary Bot"
+                    },
+                    json={
+                        "model": model,
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": f"""لخص النص التالي في نقاط واضحة، واحرص على ما يلي في تلخيصك، أولًا أن يكون التلخيص مختصرًا وفي جمل قصيرة، وأن يكون التلخيص فصيحًا لغويًا، وأن يكون هناك مسافات مريحة للعين بين النقاط، وأن تورد تاريخ ولادة ووفاة من تذكره في التلخيص بين قوسين شرط أن تكون متأكدًا منه، وشرح المصطلح الأكثر استعمالًا، ولا تطل في تلخيص النص فوق ست نقاط، ولا تكتب النقاط فقط أدرجها، وتحدث بلغة موضوعية أي لا تبدأ جوابك بالقول إليك تلخيص النص أو حسنا فقط ابدأ بتلخيص النص :
 
 {text}
 """
-                        }
-                    ],
-                    "temperature": 0.7,
-                    "max_tokens": 1000
-                },
-                timeout=60  # زاد الوقت
-            )
+                            }
+                        ],
+                        "temperature": 0.7,
+                        "max_tokens": 1000
+                    },
+                    timeout=60
+                )
 
-            print(f"Response status: {response.status_code}")
-            
-            if response.status_code != 200:
-                print(f"❌ HTTP Error {response.status_code}: {response.text}")
-                continue
-                
-            data = response.json()
-            print(f"Response keys: {data.keys() if data else 'No data'}")
+                print(f"   📡 رد الخادم: {response.status_code}")
 
-            # تحقق من وجود error
-            if "error" in data:
-                print(f"❌ {model} API error:", data['error'].get('message', 'Unknown error'))
-                continue
+                if response.status_code == 429:
+                    # حد الاستخدام - سنحاول مرة أخرى لاحقًا
+                    print(f"   ⚠️ تم تجاوز حد الاستخدام (429)، سننتظر قليلًا ثم نعيد المحاولة...")
+                    break  # نخرج من حلقة النماذج وننتقل إلى المحاولة التالية
 
-            # تحقق من وجود choices
-            if "choices" in data and len(data["choices"]) > 0:
-                result = data["choices"][0]["message"]["content"]
-                if result and result.strip():
-                    print(f"✅ Success with: {model}")
-                    return result
+                if response.status_code != 200:
+                    print(f"   ❌ خطأ HTTP {response.status_code}: {response.text[:100]}")
+                    continue  # جرب النموذج التالي
+
+                data = response.json()
+
+                if "error" in data:
+                    print(f"   ❌ خطأ من API: {data['error'].get('message', 'غير معروف')}")
+                    continue
+
+                if "choices" in data and len(data["choices"]) > 0:
+                    result = data["choices"][0]["message"]["content"]
+                    if result and result.strip():
+                        print(f"   ✅ نجح التلخيص في المحاولة {attempt} باستخدام النموذج: {model}")
+                        return result
+                    else:
+                        print(f"   ⚠️ النموذج {model} أعاد محتوى فارغًا")
                 else:
-                    print(f"⚠️ {model} returned empty content")
-            else:
-                print(f"⚠️ {model} response missing 'choices'")
-                
-        except requests.exceptions.Timeout:
-            print(f"❌ Timeout with {model}")
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Request error with {model}: {e}")
-        except Exception as e:
-            print(f"❌ Exception with {model}: {e}")
+                    print(f"   ⚠️ استجابة النموذج {model} لا تحتوي على 'choices'")
 
-    return "❌ فشل التلخيص (جميع الموديلات لم تعمل)"
-# =============================
+            except requests.exceptions.Timeout:
+                print(f"   ⏰ انتهت المهلة مع النموذج {model}")
+                continue
+            except requests.exceptions.RequestException as e:
+                print(f"   📡 خطأ في الطلب مع {model}: {e}")
+                continue
+            except Exception as e:
+                print(f"   💥 خطأ غير متوقع مع {model}: {e}")
+                continue
+
+        # إذا وصلنا إلى هنا، فشلت كل النماذج في هذه المحاولة
+        if attempt < max_attempts:
+            wait_time = 3  # ننتظر 3 ثوانٍ بين المحاولات
+            print(f"⏳ فشلت المحاولة {attempt}، ننتظر {wait_time} ثوانٍ قبل المحاولة {attempt + 1}...")
+            import time
+            time.sleep(wait_time)
+
+    return "❌ فشل التلخيص بعد 10 محاولات متتالية. يرجى المحاولة لاحقًا."
+    # =============================
 # 👋 /start
 # =============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
