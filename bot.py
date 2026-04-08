@@ -1,5 +1,5 @@
 import os
-import requests
+import time
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -9,101 +9,79 @@ from telegram.ext import (
     filters
 )
 
-MODELS = [ "qwen/qwen3.6-plus-preview:free", "qwen/qwen3.6-plus:free", "alibaba/wan-2.6", "openai/sora-2-pro", "google/veo-3.1"]
+# =============================
+# ⚙️ الإعدادات
+# =============================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
+MODELS = [
+    "llama-3.1-70b-versatile",
+    "llama-3.1-8b-instant",
+    "llama-3.2-90b-text-preview"
+]
 # group_id -> {channel_id: channel_name}
 group_channels = {}
 
 processed_messages = set()
 
 # =============================
-# 🧠 التلخيص
+# 🧠 التلخيص باستخدام Groq
 # =============================
 import requests
 
-def summarize(text, max_attempts=10):
-    """
-    تحاول التلخيص حتى 10 مرات باستخدام نماذج مختلفة
-    إذا نجحت في أي محاولة، تعيد النتيجة فورًا
-    """
+
+def summarize(text, max_attempts=100):
+    url = "https://api.groq.com/openai/v1/chat/completions"
+
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
     for attempt in range(1, max_attempts + 1):
         for model in MODELS:
             try:
-                print(f"🔄 المحاولة {attempt}/{max_attempts} - جاري تجربة النموذج: {model}")
-                
+                print(f"🔄 محاولة {attempt}/{max_attempts} باستخدام {model}")
+
                 response = requests.post(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                        "Content-Type": "application/json",
-                        "HTTP-Referer": "https://t.me/your_bot",
-                        "X-Title": "Telegram Summary Bot"
-                    },
+                    url,
+                    headers=headers,
                     json={
                         "model": model,
                         "messages": [
                             {
                                 "role": "user",
-                                "content": f"""لخص النص التالي في نقاط واضحة، واحرص على ما يلي في تلخيصك، أولًا أن يكون التلخيص مختصرًا وفي جمل قصيرة، وأن يكون التلخيص فصيحًا لغويًا، وأن يكون هناك مسافات مريحة للعين بين النقاط، وأن تورد تاريخ ولادة ووفاة من تذكره في التلخيص بين قوسين شرط أن تكون متأكدًا منه، وشرح المصطلح الأكثر استعمالًا، ولا تطل في تلخيص النص فوق ست نقاط، ولا تكتب النقاط فقط أدرجها، وتحدث بلغة موضوعية أي لا تبدأ جوابك بالقول إليك تلخيص النص أو حسنا فقط ابدأ بتلخيص النص :
-
+                                "content": f"""لخص النص التالي في نقاط واضحة، واحرص على ما يلي في تلخيصك، أولًا أن يكون التلخيص مختصرًا وفي جمل قصيرة، وأن يكون التلخيص فصيحًا لغويًا، وأن يكون هناك مسافات مريحة للعين بين النقاط، وأن تورد تاريخ ولادة ووفاة من تذكره في التلخيص بين قوسين شرط أن تكون متأكدًا منه، وشرح المصطلح الأكثر استعمالًا، ولا تطل في تلخيص النص فوق ست نقاط، ولا تكتب النقاط فقط أدرجها، وتحدث بلغة موضوعية أي لا تبدأ جوابك بالقول إليك تلخيص النص أو حسنا فقط ابدأ بتلخيص النص 
 {text}
 """
                             }
                         ],
                         "temperature": 0.7,
-                        "max_tokens": 1000
+                        "max_tokens": 800
                     },
                     timeout=60
                 )
 
-                print(f"   📡 رد الخادم: {response.status_code}")
-
-                if response.status_code == 429:
-                    # حد الاستخدام - سنحاول مرة أخرى لاحقًا
-                    print(f"   ⚠️ تم تجاوز حد الاستخدام (429)، سننتظر قليلًا ثم نعيد المحاولة...")
-                    break  # نخرج من حلقة النماذج وننتقل إلى المحاولة التالية
+                print(f"📡 الحالة: {response.status_code}")
 
                 if response.status_code != 200:
-                    print(f"   ❌ خطأ HTTP {response.status_code}: {response.text[:100]}")
-                    continue  # جرب النموذج التالي
-
-                data = response.json()
-
-                if "error" in data:
-                    print(f"   ❌ خطأ من API: {data['error'].get('message', 'غير معروف')}")
+                    print(response.text)
                     continue
 
-                if "choices" in data and len(data["choices"]) > 0:
-                    result = data["choices"][0]["message"]["content"]
-                    if result and result.strip():
-                        print(f"   ✅ نجح التلخيص في المحاولة {attempt} باستخدام النموذج: {model}")
-                        return result
-                    else:
-                        print(f"   ⚠️ النموذج {model} أعاد محتوى فارغًا")
-                else:
-                    print(f"   ⚠️ استجابة النموذج {model} لا تحتوي على 'choices'")
+                data = response.json()
+                result = data["choices"][0]["message"]["content"]
 
-            except requests.exceptions.Timeout:
-                print(f"   ⏰ انتهت المهلة مع النموذج {model}")
-                continue
-            except requests.exceptions.RequestException as e:
-                print(f"   📡 خطأ في الطلب مع {model}: {e}")
-                continue
+                if result and result.strip():
+                    print("✅ نجح التلخيص")
+                    return result
+
             except Exception as e:
-                print(f"   💥 خطأ غير متوقع مع {model}: {e}")
+                print(f"❌ خطأ: {e}")
                 continue
 
-        # إذا وصلنا إلى هنا، فشلت كل النماذج في هذه المحاولة
-        if attempt < max_attempts:
-            wait_time = 3  # ننتظر 3 ثوانٍ بين المحاولات
-            print(f"⏳ فشلت المحاولة {attempt}، ننتظر {wait_time} ثوانٍ قبل المحاولة {attempt + 1}...")
-            import time
-            time.sleep(wait_time)
-
-    return "❌ فشل التلخيص بعد 10 محاولات متتالية. يرجى المحاولة لاحقًا."
-    # =============================
+    return "❌ فشل التلخيص بعد عدة محاولات"
+# =============================
 # 👋 /start
 # =============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -131,12 +109,12 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     detected_channel_id = None
     channel_name = None
 
-    # قناة مباشرة
+    # حالة منشور من قناة
     if message.sender_chat and message.sender_chat.type == "channel":
         detected_channel_id = message.sender_chat.id
         channel_name = message.sender_chat.title
 
-    # forward
+    # حالة forward من قناة
     elif message.forward_from_chat:
         detected_channel_id = message.forward_from_chat.id
         channel_name = message.forward_from_chat.title
@@ -152,13 +130,14 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             group_channels[group_id][detected_channel_id] = channel_name
 
             await message.reply_text(
-    f"<b>أما بعد:</b>\n"
-    f"فلمّا التمس منّي بعض الإخوة المقصّرين في العلم، والمنشغلين عنه بالفاني من المهلِكات، "
-    f"أن ألخّص ما ورد في القناة المسمّاة: <b>{channel_name}</b>، أجبتُ مستعينًا بالله.",
-    parse_mode="HTML"
-)
+                f"<b>أما بعد:</b>\n"
+                f"فلمّا التمس منّي بعض الإخوة المقصّرين في العلم، والمنشغلين عنه، "
+                f"أن ألخّص ما ورد في القناة: <b>{channel_name}</b>، أجبتُ مستعينًا بالله.",
+                parse_mode="HTML"
+            )
+
     # =============================
-    # لا توجد قناة
+    # التحقق من الشروط
     # =============================
     if group_id not in group_channels:
         return
@@ -172,23 +151,28 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if message.message_id in processed_messages:
         return
 
-    if not message.text:
+    text = message.text or message.caption
+
+    if not text:
         return
 
-    if len(message.text.split()) < 75:
+    if len(text.split()) < 75:
         return
 
     processed_messages.add(message.message_id)
+    # =============================
+    # 🧠 التلخيص
+    # =============================
+    summary = summarize(text)
 
-    summary = summarize(message.text)
 
     await message.reply_text(
-    f"<b>قَالَ المُحَشِّي الفَاضِل:</b>\n\n{summary}",
-    parse_mode="HTML"
-)
+        f"<b>قَالَ المُحَشِّي الفَاضِل:</b>\n\n{summary}",
+        parse_mode="HTML"
+    )
 
 # =============================
-# 🚀 تشغيل
+# 🚀 تشغيل البوت
 # =============================
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -196,7 +180,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.ALL, handle_messages))
 
-    print("✅ Bot running...")
+    print("✅ Bot running with Groq...")
 
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
